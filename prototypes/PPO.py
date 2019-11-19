@@ -42,7 +42,7 @@ class Policy(nn.Module):
         state_values = self.value_head(x)
         return F.softmax(action_scores, dim=-1), state_values
 
-SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
+SavedAction = namedtuple('SavedAction', ['log_prob', 'value', 'ratios', 'entropy'])
 
 # define policies
 policy = Policy()
@@ -57,10 +57,10 @@ def select_action(state, old_policy):
     probs, state_value = policy(state)
     with torch.no_grad():
         probs_old, _ = policy_old(state)
-
     m = Categorical(probs)
     action = m.sample()
-    policy.saved_actions.append(SavedAction(m.log_prob(action), state_value))
+    r_t = probs[action]/probs_old[action]
+    policy.saved_actions.append(SavedAction(m.log_prob(action), state_value, r_t, m.entropy()))
     return action.item()
 
 "GIVEN rewards array from rollout return the returns with zero mean and unit std"        
@@ -73,20 +73,32 @@ def discount_rewards(rewards_arr, gamma, start_value=0):
     returns = torch.tensor(returns)
     if len(returns) == 1:
         return returns
-    else:
-        return returns
+    return (returns - returns.mean())/(returns.std() + eps)
 
-def train_on_rollout(gamma=0.99):
+def compute_single_actor_loss_element(r_t, advantage_t, clip_value=0.2):
+    first_val = r_t * advantage_t
+    second_val = torch.clamp(r_t, 1-clip_value, 1+clip_value) * advantage_t
+    if first_val.item() > second_val.item():
+        return second_val 
+    else:
+        return first_val
+
+def train_on_rollout(gamma, writer, T):
     returns = discount_rewards(policy.rewards, gamma)
     actor_loss = []
     critic_loss = []
-    for (log_prob, value), r in zip(policy.saved_actions, returns):
+    entropy_objective = []
+    for (log_prob, value, ratio, entropy), r in zip(policy.saved_actions, returns):
         advantage = r - value.item()
-        actor_loss.append(-log_prob * advantage)
+        # PPO changes the actor loss
+        actor_loss.append(-compute_single_actor_loss_element(ratio, advantage))
+        entropy_objective.append(-entropy)
         critic_loss.append(F.smooth_l1_loss(value, torch.tensor([r])))
     optimizer.zero_grad()
-    loss = torch.stack(actor_loss).sum() + torch.stack(critic_loss).sum()
+    loss = torch.stack(actor_loss).mean() + torch.stack(critic_loss).mean()
+    loss += 0.1 * torch.stack(entropy_objective).mean()
     loss.backward()
+    writer.add_scalar("actor and critic loss", loss.item(), T)
     optimizer.step()
     del policy.rewards[:]
     del policy.saved_actions[:]
@@ -136,7 +148,7 @@ def learn_episodic_A2C(N_eps, max_ep_steps, writer):
             # if done or ((t % batch_update) == 0):
                 # train_on_batch(observation, done, writer, df, T)
             if done:
-                train_on_rollout(0.99)
+                train_on_rollout(df, writer, T)
                 if initially_updated:
                     hard_update(policy_old, policy)
                 initially_updated = True

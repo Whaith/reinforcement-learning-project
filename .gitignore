@@ -1,2 +1,5 @@
 .vscode/
 *.code-workspace
+*runs/
+*.pyc
+prototypes/__pycache__/utils.cpython-37.pyc

@@ -1,7 +1,4 @@
 #%%
-import sys
-sys.path.append('.')
-
 import gym
 import numpy as np
 from itertools import count
@@ -16,9 +13,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 from tensorboardX import SummaryWriter
-
-from utils import hard_update
-
 #%%
 class Policy(nn.Module):
     def __init__(self):
@@ -44,20 +38,13 @@ class Policy(nn.Module):
 
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
-# define policies
 policy = Policy()
-policy_old = Policy()
-hard_update(policy_old, policy)
-
 optimizer = optim.RMSprop(policy.parameters(), lr=3e-3)
 eps = np.finfo(np.float32).eps.item()
 
-def select_action(state, old_policy):
+def select_action(state):
     state = torch.from_numpy(state).float()
     probs, state_value = policy(state)
-    with torch.no_grad():
-        probs_old, _ = policy_old(state)
-
     m = Categorical(probs)
     action = m.sample()
     policy.saved_actions.append(SavedAction(m.log_prob(action), state_value))
@@ -123,13 +110,11 @@ def learn_episodic_A2C(N_eps, max_ep_steps, writer):
     batch_update = 20
     env._max_episode_steps = max_ep_steps
     T = 0
-    initially_updated = False
     for i_episode in range(N_eps):
         observation = env.reset()
         total_r = 0
         for t in range(100000):
-            action = select_action(observation, policy_old)
-
+            action = select_action(observation)
             observation, reward, done, info = env.step(action)
             policy.rewards.append(reward)
             total_r += reward
@@ -137,9 +122,6 @@ def learn_episodic_A2C(N_eps, max_ep_steps, writer):
                 # train_on_batch(observation, done, writer, df, T)
             if done:
                 train_on_rollout(0.99)
-                if initially_updated:
-                    hard_update(policy_old, policy)
-                initially_updated = True
                 if (i_episode + 1) % 100 == 0:                
                     print("Episode {} finished after {} timesteps".format(i_episode, t+1))
                 break

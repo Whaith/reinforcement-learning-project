@@ -4,6 +4,10 @@ This project is a two player version of the pong-v0 OpenAI Gym environment.
 The environment is used in the Reinforcement Learning course at Aalto University,
 Finland.
 
+## Dependencies
+### install with conda (to a new environment):
+`conda env create -f=conda_env.yml -n {new environment name}`
+
 ## How to use
 - Clone the repository: `https://github.com/aalto-intelligent-robotics/Wimblepong`.
 - Install the dependencies listed in requirements.txt.

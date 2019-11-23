@@ -51,10 +51,10 @@ class Policy(nn.Module):
         return F.softmax(action_scores, dim=-1), state_values
 
 class PPO_Agent():
-    def __init__(self, clip_value=0.2):
+    def __init__(self, clip_value=0.2, policy=Policy):
         # define policies
-        self.policy = Policy()
-        self.policy_old = Policy()
+        self.policy = policy()
+        self.policy_old = policy()
         hard_update(self.policy_old, self.policy)
 
         self.optimizer = optim.RMSprop(self.policy.parameters(), lr=3e-3)

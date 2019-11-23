@@ -2,6 +2,7 @@
 This is an example on how to use the two player Wimblepong environment with one
 agent and the SimpleAI
 """
+#%%
 import matplotlib.pyplot as plt
 from random import randint
 import pickle
@@ -9,7 +10,6 @@ import gym
 import numpy as np
 import argparse
 import wimblepong
-import PPO_Agent from prototypes.PPO_agent
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
@@ -26,11 +26,12 @@ env.unwrapped.fps = args.fps
 # Number of episodes/games to play
 episodes = 100000
 
+#%%
+
 # Define the player
 player_id = 1
 # Set up the player here. We used the SimpleAI that does not take actions for now
 player = wimblepong.SimpleAi(env, player_id)
-ppo_agent = PPO_Agent()
 
 # Housekeeping
 states = []

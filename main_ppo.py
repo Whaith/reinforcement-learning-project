@@ -23,8 +23,10 @@ from prototypes.PPO_agent import PPO_Agent, CNN_policy
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
+parser.add_argument("--continue_training", default=False, help="Continue from last checkpoint")
 parser.add_argument("--fps", type=int, help="FPS for rendering", default=30)
 parser.add_argument("--scale", type=int, help="Scale of the rendered game", default=1)
+parser.add_argument("--lr", type=float, help="Scale of the rendered game", default=1e-4)
 args = parser.parse_args()
 
 def image_to_grey(obs, target_reso=(84, 84)):
@@ -43,8 +45,9 @@ episodes = 10000000
 player_id = 1
 opponent_id = 3 - player_id
 opponent = wimblepong.SimpleAi(env, opponent_id)
-player = PPO_Agent(policy=CNN_policy, policy_kwargs={'num_actions': N_ACTIONS})
-player.load_model()
+player = PPO_Agent(policy=CNN_policy, policy_kwargs={'num_actions': N_ACTIONS}, lr=args.lr)
+if args.continue_training:
+    player.load_model()
 # Set the names for both SimpleAIs
 env.set_names(player.get_name(), opponent.get_name())
 # PPO SETTINGS
@@ -59,6 +62,7 @@ reset_deque(observations_queue, N_STACKED_FRAMES)
 win1 = 0
 T = 0
 initially_updated = False
+writer = SummaryWriter()
 for i in range(0,episodes):
     done = False
     # reset observations to agents
@@ -69,7 +73,6 @@ for i in range(0,episodes):
     # set last element to actual observation
     observations_queue.append(image_to_grey(observation[0]))
     total_r = 0
-    writer = SummaryWriter()
     while not done:
         # Get the actions from both SimpleAIs
         observation_1 = np.stack([observations_queue])

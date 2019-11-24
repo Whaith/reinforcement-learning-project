@@ -93,13 +93,13 @@ class CNN_policy(nn.Module):
         return device
 
 class PPO_Agent():
-    def __init__(self, clip_value=0.2, policy=Policy, policy_kwargs={}):
+    def __init__(self, lr=3e-3, clip_value=0.2, policy=Policy, policy_kwargs={}):
         # define policies
         self.policy = policy(**policy_kwargs)
         self.policy_old = policy(**policy_kwargs)
         hard_update(self.policy_old, self.policy)
 
-        self.optimizer = optim.RMSprop(self.policy.parameters(), lr=3e-3)
+        self.optimizer = optim.RMSprop(self.policy.parameters(), lr=lr)
         self.eps = np.finfo(np.float32).eps.item()
         self.clip_value=0.2
         self.gamma = 0.99

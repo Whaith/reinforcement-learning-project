@@ -23,7 +23,7 @@ from prototypes.PPO_agent import PPO_Agent, CNN_policy
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
-parser.add_argument("--continue_training", default=False, help="Continue from last checkpoint")
+parser.add_argument("--continue_training", action="store_true", help="Continue from last checkpoint")
 parser.add_argument("--fps", type=int, help="FPS for rendering", default=30)
 parser.add_argument("--scale", type=int, help="Scale of the rendered game", default=1)
 parser.add_argument("--lr", type=float, help="Scale of the rendered game", default=1e-4)
@@ -45,7 +45,8 @@ episodes = 10000000
 player_id = 1
 opponent_id = 3 - player_id
 opponent = wimblepong.SimpleAi(env, opponent_id)
-player = PPO_Agent(policy=CNN_policy, policy_kwargs={'num_actions': N_ACTIONS}, lr=args.lr)
+player = PPO_Agent(policy=CNN_policy, policy_kwargs={'num_actions': N_ACTIONS}, \
+    lr=args.lr, df=0.999)
 if args.continue_training:
     player.load_model()
 # Set the names for both SimpleAIs
@@ -63,6 +64,7 @@ win1 = 0
 T = 0
 initially_updated = False
 writer = SummaryWriter()
+running_mean = deque([0], maxlen=100)
 for i in range(0,episodes):
     done = False
     # reset observations to agents
@@ -99,7 +101,8 @@ for i in range(0,episodes):
             if initially_updated:
                 player.set_old_policy_to_new()
             initially_updated = True
-            print("episode {} over. Broken WR: {:.3f}".format(i, win1/(i+1)))
+            running_mean.append(total_r)
+            print("episode {} over. last 100ep reward: {:.3f}".format(i, np.mean(running_mean)))
         T += 1
     writer.add_scalar("Ep reward", total_r, i)
 

@@ -93,7 +93,8 @@ class CNN_policy(nn.Module):
         return device
 
 class PPO_Agent():
-    def __init__(self, lr=3e-3, clip_value=0.2, policy=Policy, policy_kwargs={}):
+    def __init__(self, lr=3e-3, clip_value=0.2, \
+            policy=Policy, policy_kwargs={}, df=0.99, gradient_clip=5.0):
         # define policies
         self.policy = policy(**policy_kwargs)
         self.policy_old = policy(**policy_kwargs)
@@ -101,10 +102,12 @@ class PPO_Agent():
 
         self.optimizer = optim.RMSprop(self.policy.parameters(), lr=lr)
         self.eps = np.finfo(np.float32).eps.item()
+        self.gradient_clip = gradient_clip
         self.clip_value=0.2
-        self.gamma = 0.99
+        self.gamma = df
         self.entropy_bonus = 0.01
         self.policy.train()
+        
 
     def select_action(self, state):
         # state = torch.from_numpy(state.astype('float32')).to(device)
@@ -147,7 +150,8 @@ class PPO_Agent():
             }, name)
 
     def load_model(self, name="PPO_from_pixels.pth"):
-        checkpoint = torch.load(name)
+        device = self.policy.get_device()
+        checkpoint = torch.load(name, map_location=device)
         self.policy.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.policy.train()
@@ -167,8 +171,9 @@ class PPO_Agent():
         self.optimizer.zero_grad()
         loss = torch.stack(actor_loss).mean() + torch.stack(critic_loss).mean()
         loss += self.entropy_bonus * torch.stack(entropy_objective).mean()
-        loss.backward()
         writer.add_scalar("actor and critic loss", loss.item(), T)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.gradient_clip)
         self.optimizer.step()
         del self.policy.rewards[:]
         del self.policy.saved_actions[:]

@@ -17,7 +17,7 @@ import torch.optim as optim
 from torch.distributions import Categorical
 from tensorboardX import SummaryWriter
 
-from utils import hard_update
+from .utils import hard_update
 
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -50,20 +50,64 @@ class Policy(nn.Module):
         state_values = self.value_head(x)
         return F.softmax(action_scores, dim=-1), state_values
 
+class CNN_policy(nn.Module):
+    def __init__(self, num_actions, input_shape=(3, 84, 84)):
+        super(CNN_policy, self).__init__()
+        # input N_batch, N_channel, Height, Width
+        self.conv1 = nn.Conv2d(3, 16, 8, 4)
+        self.conv2 = nn.Conv2d(16, 32, 4, 2)
+
+        self.fc1 = nn.Linear(9 * 9 * 32, 256)
+        self.final = nn.Linear(256, num_actions)
+        self.critic_value = nn.Linear(256, 1)
+
+        self.saved_actions = []
+        self.rewards = []
+
+    def forward(self, x, only_value=False):
+        if only_value:
+            with torch.no_grad():
+                x = torch.from_numpy(x).to(device)
+                x = F.relu(self.conv1(x))
+                x = F.relu(self.conv2(x))
+                x = x.view(x.size(0), -1)
+                x = F.relu(self.fc1(x))
+                return self.critic_value(x)
+        x = torch.from_numpy(x).to(device)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        logits = self.final(x)
+        value = self.critic_value(x)
+        return F.softmax(logits, -1).squeeze(), value.squeeze()
+    
+    @classmethod
+    def get_device(self):
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+            torch.set_default_tensor_type(torch.cuda.FloatTensor)
+        else:
+            device = torch.device('cpu')
+            torch.set_default_tensor_type(torch.FloatTensor)
+        return device
+
 class PPO_Agent():
-    def __init__(self, clip_value=0.2, policy=Policy):
+    def __init__(self, clip_value=0.2, policy=Policy, policy_kwargs={}):
         # define policies
-        self.policy = policy()
-        self.policy_old = policy()
+        self.policy = policy(**policy_kwargs)
+        self.policy_old = policy(**policy_kwargs)
         hard_update(self.policy_old, self.policy)
 
         self.optimizer = optim.RMSprop(self.policy.parameters(), lr=3e-3)
         self.eps = np.finfo(np.float32).eps.item()
         self.clip_value=0.2
         self.gamma = 0.99
+        self.entropy_bonus = 0.01
+        self.policy.train()
 
     def select_action(self, state):
-        state = torch.from_numpy(state.astype('float32')).to(device)
+        # state = torch.from_numpy(state.astype('float32')).to(device)
         probs, state_value = self.policy(state)
         with torch.no_grad():
             probs_old, _ = self.policy_old(state)
@@ -72,6 +116,9 @@ class PPO_Agent():
         r_t = probs[action]/probs_old[action]
         self.policy.saved_actions.append(SavedAction(m.log_prob(action), state_value, r_t, m.entropy()))
         return action.item()
+    
+    def get_name(self):
+        return "Skynet"
 
     "GIVEN rewards array from rollout return the returns with zero mean and unit std"        
     def discount_rewards(self, rewards_arr, gamma, start_value=0):
@@ -93,6 +140,19 @@ class PPO_Agent():
         else:
             return first_val
 
+    def save_models(self, name="PPO_from_pixels.pth"):
+        torch.save({
+            'model_state_dict': self.policy.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            }, name)
+
+    def load_model(self, name="PPO_from_pixels.pth"):
+        checkpoint = torch.load(name)
+        self.policy.load_state_dict(checkpoint['model_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.policy.train()
+
+
     def train_on_rollout(self, writer, T):
         returns = self.discount_rewards(self.policy.rewards, self.gamma)
         actor_loss = []
@@ -106,7 +166,7 @@ class PPO_Agent():
             critic_loss.append(F.smooth_l1_loss(value, torch.tensor([r])))
         self.optimizer.zero_grad()
         loss = torch.stack(actor_loss).mean() + torch.stack(critic_loss).mean()
-        loss += 0.1 * torch.stack(entropy_objective).mean()
+        loss += self.entropy_bonus * torch.stack(entropy_objective).mean()
         loss.backward()
         writer.add_scalar("actor and critic loss", loss.item(), T)
         self.optimizer.step()

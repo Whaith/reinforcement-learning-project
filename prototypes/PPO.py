@@ -42,39 +42,6 @@ class Policy(nn.Module):
         state_values = self.value_head(x)
         return F.softmax(action_scores, dim=-1), state_values
 
-class CNN_policy(nn.Module):
-    def __init__(self, num_actions, input_shape=(84, 84, 3)):
-        super(CNN_policy, self).__init__()
-        # input N_batch, N_channel, Height, Width
-        self.conv1 = nn.Conv2d(3, 16, 8, 4)
-        self.conv2 = nn.Conv2d(16, 32, 4, 2)
-
-        self.fc1 = nn.Linear(9 * 9 * 32, 256)
-        self.final = nn.Linear(256, num_actions)
-        self.critic_value = nn.Linear(256, 1)
-
-        self.saved_actions = []
-        self.rewards = []
-
-    def forward(self, x, only_value=False):
-        if only_value:
-            with torch.no_grad():
-                x = torch.from_numpy(x.astype('float32'))#.to(device)
-                x = F.relu(self.conv1(x / 255.0))
-                x = F.relu(self.conv2(x))
-                x = x.view(x.size(0), -1)
-                x = F.relu(self.fc1(x))
-                return self.critic_value(x)
-
-        x = torch.from_numpy(x.astype('float32'))#.to(device)
-        x = F.relu(self.conv1(x / 255.0))
-        x = F.relu(self.conv2(x))
-        x = x.view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        logits = self.final(x)
-        value = self.critic_value(x)
-        return F.softmax(logits, -1), value
-
 
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value', 'ratios', 'entropy'])
 

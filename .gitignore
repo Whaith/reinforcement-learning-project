@@ -4,3 +4,4 @@
 *.pyc
 prototypes/__pycache__/utils.cpython-37.pyc
 *.pyc
+*.DS_Store

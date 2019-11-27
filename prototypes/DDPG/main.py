@@ -42,7 +42,7 @@ class Policy_net(nn.Module):
         x = F.relu(self.affine1(x))
         x = F.relu(self.affine2(x))
         # -2 to 2 with tanh
-        mean = 2*torch.tanh(self.mean_head(x))
+        mean = self.mean_head(x)
         return  mean
 
 class Q_net(nn.Module):
@@ -103,54 +103,9 @@ policy_net_target.eval()
 optim_q = optim.Adam(Q_value_net.parameters(), lr=1e-3)
 optim_p = optim.Adam(policy_net.parameters(), lr=1e-3)
 
-# def select_greedy(obs):
-#     with torch.no_grad():
-#         obs_ = torch.from_numpy(obs).float()
-#         values = Q_network(obs_)
-#         return torch.argmax(values.detach()).view(1, -1)
-    
-# def get_action(observation):
-#     x = torch.from_numpy(observation).float()
-#     normal = policy_net(x)
-#     return normal.sample()
-
-def get_q_inputs(state, action):
-    return torch.cat([state, action], 1)
-
 def train_on_batch(memory, batch_size, df, T, writer):
-    # TODO-in future: remove the casting to tensors all the time
-    # Vectorized implementation
-    batch = memory.sample(batch_size)
-    # connect all batch Transitions to one tuple
-    batch_n = Transition(*zip(*batch))
-    # reshape actions so ve can collect the DQN(S_t, a_t) easily with gather
-    actions = torch.tensor(batch_n.action).float().view(-1, 1)
-    # get batch states
-#     print(batch_n.state)
-    states = torch.cat(batch_n.state).float()
-    next_states = torch.cat(batch_n.next_state).float()
-    batch_rewards = torch.cat(batch_n.reward).float().view(-1, 1)
-    
-    dones = torch.tensor(batch_n.done).float().view(-1, 1)
-    # collect only needed Q-values with corresponding actions for loss computation
-    inputs = Q_value_net(get_q_inputs(states, actions))
-    targets = batch_rewards
-    # targets += df*Q_network_target(next_states).max(1)[0].detach()*(1 - dones)
-    targets += (1-dones)*df*Q_value_net_target(torch.cat([next_states, policy_net_target(next_states).view(-1, 1)], 1))
-    
-    # critic loss
-    optim_q.zero_grad()
-    loss = F.mse_loss(inputs, targets.view(inputs.shape))
-    writer.add_scalar("Critic loss", loss.item(), T)
-    loss.backward()
-    optim_q.step()
-
-    # actor loss
-    optim_p.zero_grad()
-    loss_actor = -1 * (Q_value_net(torch.cat([states, policy_net(states).view(-1, 1)], 1))).mean()
-    writer.add_scalar("Actor loss", loss_actor.item(), T)
-    loss_actor.backward()
-    optim_q.step()
+    pass
+    # TODO
 
     soft_update(Q_value_net_target, Q_value_net, tau=0.001)
     soft_update(policy_net_target, policy_net, tau=0.001)

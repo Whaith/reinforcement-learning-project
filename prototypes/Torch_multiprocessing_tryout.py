@@ -5,6 +5,10 @@ import torch
 import torch.distributed as dist
 from torch.multiprocessing import Process, get_context
 import torch.nn.functional as F
+import time
+
+from timeit import default_timer as timer
+
 
 # def run(rank, size):
 #     """ Distributed function to be implemented later. """
@@ -52,15 +56,33 @@ import torch.nn.functional as F
 
 # """ All-Reduce example."""
 def run(rank, size):
-    torch.cuda.set_device(0)
+    # torch.cuda.set_device(0)
     """ Simple point-to-point communication. """
     # print('size', )
-    group = dist.new_group([i for i in range(size)])
-    tensor = torch.ones(1).cuda(0)
-    dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
-    print('Rank ', rank, ' has data ', tensor[0])
+    if rank == 0:
+        start = timer()
 
-def init_process(rank, size, fn, backend='mpi4py'):
+    group = dist.new_group([i for i in range(size)])
+    tensor = torch.ones(1)
+    if rank != 0:
+        time.sleep(rank**2)
+        tensor[0] = rank
+    # gather_list = None
+    # print(f"ranK: {rank}")
+    # if rank == 0:
+    gather_list = [torch.zeros_like(tensor) for i in range(size)]
+    gather_list = [] if rank != 0 else gather_list
+
+    dist.gather(tensor, gather_list, 0, group)
+    # else:
+        # dist.gather(tensor, dst=0)
+    if rank == 0:
+        # ...
+        end = timer()
+        print(end - start)
+    print('Rank ', rank, ' has data ', gather_list)
+
+def init_process(rank, size, fn, backend='gloo'):
     """ Initialize the distributed environment. """
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
@@ -68,7 +90,7 @@ def init_process(rank, size, fn, backend='mpi4py'):
     fn(rank, size)
 
 if __name__ == "__main__":
-    size = 10
+    size = 5
     processes = []
     for rank in range(size):
         p = Process(target=init_process, args=(rank, size, run))

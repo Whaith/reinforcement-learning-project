@@ -3,7 +3,7 @@
 import os
 import torch
 import torch.distributed as dist
-from torch.multiprocessing import Process
+from torch.multiprocessing import Process, get_context
 import torch.nn.functional as F
 
 # def run(rank, size):
@@ -11,6 +11,7 @@ import torch.nn.functional as F
 #     ### run each gym environment separately, computing get batch of size_T, experience
 #     ### compute advantages and everything that is needed for the 
 
+# get_context()
 #     pass
 # """Blocking point-to-point communication."""
 
@@ -27,27 +28,27 @@ import torch.nn.functional as F
 
 # Globals
 
-class Policy(nn.Module):
-    def __init__(self):
-        super(Policy, self).__init__()
-        self.affine1 = nn.Linear(4, 128)
-        self.action_head = nn.Linear(128, 2)
-        self.value_head = nn.Linear(128, 1)
+# class Policy(nn.Module):
+#     def __init__(self):
+#         super(Policy, self).__init__()
+#         self.affine1 = nn.Linear(4, 128)
+#         self.action_head = nn.Linear(128, 2)
+#         self.value_head = nn.Linear(128, 1)
 
-        self.saved_actions = []
-        self.rewards = []
+#         self.saved_actions = []
+#         self.rewards = []
 
-    def forward(self, x, only_value=False):
-        if only_value:
-            with torch.no_grad():
-                x = F.relu(self.affine1(x))
-                state_values = self.value_head(x)
-                return state_values
+#     def forward(self, x, only_value=False):
+#         if only_value:
+#             with torch.no_grad():
+#                 x = F.relu(self.affine1(x))
+#                 state_values = self.value_head(x)
+#                 return state_values
 
-        x = F.relu(self.affine1(x))
-        action_scores = self.action_head(x)
-        state_values = self.value_head(x)
-        return F.softmax(action_scores, dim=-1), state_values
+#         x = F.relu(self.affine1(x))
+#         action_scores = self.action_head(x)
+#         state_values = self.value_head(x)
+#         return F.softmax(action_scores, dim=-1), state_values
 
 # """ All-Reduce example."""
 def run(rank, size):

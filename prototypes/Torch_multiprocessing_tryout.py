@@ -64,15 +64,25 @@ def run(rank, size):
 
     group = dist.new_group([i for i in range(size)])
     tensor = torch.ones(1)
+    tensor2 = torch.ones(1)
+
     if rank != 0:
         time.sleep(rank**2)
         tensor[0] = rank
+        tensor2[0] = rank*3
+
     # gather_list = None
     # print(f"ranK: {rank}")
     # if rank == 0:
     gather_list = [torch.zeros_like(tensor) for i in range(size)]
     gather_list = [] if rank != 0 else gather_list
 
+
+    second_gather_list = [torch.zeros_like(tensor) for i in range(size)]
+    second_gather_list = [] if rank != 0 else second_gather_list
+
+
+    dist.gather(tensor2, second_gather_list, 0, group)
     dist.gather(tensor, gather_list, 0, group)
     # else:
         # dist.gather(tensor, dst=0)
@@ -81,6 +91,11 @@ def run(rank, size):
         end = timer()
         print(end - start)
     print('Rank ', rank, ' has data ', gather_list)
+    print('Rank ', rank, ' has 2nd data ', second_gather_list)
+
+
+
+
 
 def init_process(rank, size, fn, backend='gloo'):
     """ Initialize the distributed environment. """

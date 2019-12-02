@@ -32,6 +32,8 @@ args = parser.parse_args()
 def image_to_grey(obs, target_reso=(84, 84)):
     return np.dot(cv2.resize(obs[...,:3], dsize=target_reso), [0.2989, 0.5870, 0.1140]).astype('float32')/255.0
 
+prepro = lambda img: imresize(img[35:195].mean(2), (80,80)).astype(np.float32).reshape(1,80,80)/255.
+
 # Make the environment
 env = gym.make("WimblepongVisualMultiplayer-v0")
 env.unwrapped.scale = args.scale
@@ -74,6 +76,10 @@ for i in range(0,episodes):
     reset_deque(observations_queue, 2)
     # set last element to actual observation
     observations_queue.append(image_to_grey(observation[0]))
+
+    plt.imshow(prepro(observation[0]))
+    plt.show()
+
     total_r = 0
     while not done:
         # Get the actions from both SimpleAIs

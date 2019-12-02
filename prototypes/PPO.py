@@ -172,8 +172,8 @@ class PPO_Centralized_Trainer():
 
 
 def run(shared_policy, policy, rank, size):
-    N_eps = 500
-    ep_steps = 1500
+    N_eps = 1500
+    ep_steps = 500
     group = dist.new_group([i for i in range(size)])
     batch_update_freq = 30
     if rank != 0:
@@ -214,18 +214,19 @@ def run(shared_policy, policy, rank, size):
                     
                     dist.gather(a, gather_list=[], dst=0, group=group)
                     # dist.barrier()
-                    # dist.gather(b, gather_list=[], dst=0, group=group)
+                    dist.gather(b, gather_list=[], dst=0, group=group)
+                    # dist.barrier()
+                    dist.gather(c, gather_list=[], dst=0, group=group)
                     # # dist.barrier()
-                    # dist.gather(c, gather_list=[], dst=0, group=group)
-                    # # # dist.barrier()
-                    # dist.gather(d, gather_list=[], dst=0, group=group)
+                    dist.gather(d, gather_list=[], dst=0, group=group)
                     
                     agent.clear_experience()
                     # print('111')
                 if done:
     #                 train_on_batch(0.99, observation, done)
+                    print(i_episode)
                     if (i_episode + 1) % 100 == 0:                
-                        if rank == 1: print("Episode {} finished after {} timesteps".format(i_episode, t+1))
+                        if rank == 1: pass#print(i_episode)#print("Episode {} finished after {} timesteps".format(i_episode, t+1))
                     break
             if rank == 1: rewards.append(total_r)
 
@@ -239,33 +240,34 @@ def run(shared_policy, policy, rank, size):
 
         while(True):
             dist.gather(old_states[0], gather_list=old_states, dst=0, group=group)
-            # dist.gather(old_actions[0], gather_list=old_actions, dst=0, group=group)
-            # dist.gather(old_logprobs[0], gather_list=old_logprobs, dst=0, group=group)
-            # dist.gather(old_returns[0], gather_list=old_returns, dst=0, group=group)
+            dist.gather(old_actions[0], gather_list=old_actions, dst=0, group=group)
+            dist.gather(old_logprobs[0], gather_list=old_logprobs, dst=0, group=group)
+            dist.gather(old_returns[0], gather_list=old_returns, dst=0, group=group)
             # print('----------')
             states = torch.cat(old_states[1:])
-            # # print(states.shape)
-            # actions = torch.cat(old_actions[1:])
-            # # print(actions.shape)
-            # logprobs = torch.cat(old_logprobs[1:])
-            # # print(logprobs.shape)
-            # returns = torch.cat(old_returns[1:])
+            # print(states.shape)
+            actions = torch.cat(old_actions[1:])
+            # print(actions.shape)
+            logprobs = torch.cat(old_logprobs[1:])
+            # print(logprobs.shape)
+            returns = torch.cat(old_returns[1:])
             # print(returns.shape)
-            # trainer.train(states, actions, logprobs, returns)
+            trainer.train(states, actions, logprobs, returns)
             # pass
-            dist.barrier()
+            # dist.barrier()
 
 
 def init_process(shared_policy, policy, rank, size, fn, backend='gloo'):
     """ Initialize the distributed environment. """
     os.environ['MASTER_ADDR'] = '127.0.0.1'
-    os.environ['MASTER_PORT'] = '30001'
-    # os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['MASTER_PORT'] = '30025'
+    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['GLOO_SOCKET_IFNAME'] = 'eno1'
     dist.init_process_group(backend, rank=rank, world_size=size)
     fn(shared_policy, policy, rank, size)
 
 if __name__ == '__main__':
-    num_agents = 1
+    num_agents = 3
     # one thread 0 is reserved for centralized learner
     shared_policy = Policy()
     shared_policy.share_memory()

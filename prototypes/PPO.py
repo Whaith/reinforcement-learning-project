@@ -15,7 +15,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 import os
-os.environ['OMP_NUM_THREADS'] = '1'
+import torch.multiprocessing as mp
+import torch.distributed as dist
 
 def moving_average(x, N):
     return np.convolve(x, np.ones(N, ), mode='valid') / N
@@ -107,6 +108,7 @@ class PPO_Agent():
     #     print(old_actions)
         old_logprobs = torch.tensor(self.logprobs).float()
     #     print(old_logprobs.shape)
+        # print('collected experience')
         return states, torch.tensor(old_actions), old_logprobs, returns
 
     def clear_experience(self):
@@ -116,7 +118,6 @@ class PPO_Agent():
         del self.logprobs[:]
         del self.rewards[:]
         del self.dones[:]
-        # print('collected experience')
         dist.barrier()
 
 class PPO_Centralized_Trainer():
@@ -125,10 +126,11 @@ class PPO_Centralized_Trainer():
         self.policy = policy
         self.clip_val = 0.1
         self.c2 = 0.0001
-        self.optimizer = optim.RMSprop(self.policy.parameters(), lr=3e-3)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=1e-4)
         self.n_epochs = 3
 
     def train(self, states, old_actions, old_logprobs, returns):
+        # pass
         # print('processing experience')
         # return
          # PPO OLD VALUES
@@ -159,7 +161,8 @@ class PPO_Centralized_Trainer():
             loss_total.backward()
             self.optimizer.step()
 
-        self.shared_policy.load_state_dict(self.policy.state_dict())  
+        self.shared_policy.load_state_dict(self.policy.state_dict())
+        # print('trained_on_experience')
         dist.barrier()
 
 # N_EPS = 1500
@@ -168,17 +171,9 @@ class PPO_Centralized_Trainer():
 # plt.plot(moving_average(rewards_PPO, 150), label='RMSprop')
 
 
-# parallelized code
-import os
-import torch
-import torch.distributed as dist
-from torch.multiprocessing import Process, get_context
-import torch.nn.functional as F
-import time
-
 def run(shared_policy, policy, rank, size):
     N_eps = 500
-    ep_steps = 500
+    ep_steps = 1500
     group = dist.new_group([i for i in range(size)])
     batch_update_freq = 30
     if rank != 0:
@@ -211,15 +206,20 @@ def run(shared_policy, policy, rank, size):
                     #     c: {c}, shape: {c.shape}, {c.dtype} # torch.float32, 30
                     #     d: {d}, shape: {d.shape}, {d.dtype} # torch.float32, 30
                     # """)
-
-                    dist.gather(a, [], 0, group=group)
+                    # assert a.shape[0] == batch_update_freq, "qqqq"
+                    # assert b.shape[0] == batch_update_freq, "zzzzz"
+                    # assert c.shape[0] == batch_update_freq, 'ggggg'
+                    # assert d.shape[0] == batch_update_freq, "ooooooo"
+                    # print(a.shape, b.shape, c.shape, d.shape)
+                    
+                    dist.gather(a, gather_list=[], dst=0, group=group)
                     # dist.barrier()
-                    dist.gather(b, [], 0, group=group)
-                    # dist.barrier()
-                    dist.gather(c, [], 0, group=group)
+                    # dist.gather(b, gather_list=[], dst=0, group=group)
                     # # dist.barrier()
-                    dist.gather(d, [], 0, group=group)
-
+                    # dist.gather(c, gather_list=[], dst=0, group=group)
+                    # # # dist.barrier()
+                    # dist.gather(d, gather_list=[], dst=0, group=group)
+                    
                     agent.clear_experience()
                     # print('111')
                 if done:
@@ -239,31 +239,33 @@ def run(shared_policy, policy, rank, size):
 
         while(True):
             dist.gather(old_states[0], gather_list=old_states, dst=0, group=group)
-            dist.gather(old_actions[0], gather_list=old_actions, dst=0, group=group)
-            dist.gather(old_logprobs[0], gather_list=old_logprobs, dst=0, group=group)
-            dist.gather(old_returns[0], gather_list=old_returns, dst=0, group=group)
+            # dist.gather(old_actions[0], gather_list=old_actions, dst=0, group=group)
+            # dist.gather(old_logprobs[0], gather_list=old_logprobs, dst=0, group=group)
+            # dist.gather(old_returns[0], gather_list=old_returns, dst=0, group=group)
             # print('----------')
             states = torch.cat(old_states[1:])
-            # print(states.shape)
-            actions = torch.cat(old_actions[1:])
-            # print(actions.shape)
-            logprobs = torch.cat(old_logprobs[1:])
-            # print(logprobs.shape)
-            returns = torch.cat(old_returns[1:])
+            # # print(states.shape)
+            # actions = torch.cat(old_actions[1:])
+            # # print(actions.shape)
+            # logprobs = torch.cat(old_logprobs[1:])
+            # # print(logprobs.shape)
+            # returns = torch.cat(old_returns[1:])
             # print(returns.shape)
-            trainer.train(states, actions, logprobs, returns)
+            # trainer.train(states, actions, logprobs, returns)
             # pass
+            dist.barrier()
 
 
 def init_process(shared_policy, policy, rank, size, fn, backend='gloo'):
     """ Initialize the distributed environment. """
     os.environ['MASTER_ADDR'] = '127.0.0.1'
-    os.environ['MASTER_PORT'] = '29509'
+    os.environ['MASTER_PORT'] = '30001'
+    # os.environ['OMP_NUM_THREADS'] = '1'
     dist.init_process_group(backend, rank=rank, world_size=size)
-    run(shared_policy, policy, rank, size)
+    fn(shared_policy, policy, rank, size)
 
 if __name__ == '__main__':
-    num_agents = 3
+    num_agents = 1
     # one thread 0 is reserved for centralized learner
     shared_policy = Policy()
     shared_policy.share_memory()
@@ -273,9 +275,15 @@ if __name__ == '__main__':
     size = num_agents + 1
     processes = []
     for rank in range(size):
-        p = Process(target=init_process, args=(shared_policy, policy, rank, size, run))
+        p = mp.Process(target=init_process, args=(shared_policy, policy, rank, size, run))
         p.start()
         processes.append(p)
+
+    # processes = []
+    # for rank in range(size):
+    #     p = mp.Process(target=run, args=(shared_policy, policy, rank, size))
+    #     p.start() ; processes.append(p)
+    # for p in processes: p.join()
 
     for p in processes:
         p.join()

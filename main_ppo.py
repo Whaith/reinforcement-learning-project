@@ -20,7 +20,6 @@ from tensorboardX import SummaryWriter
 import wimblepong
 from prototypes.PPO_agent import PPO_Agent, CNN_policy
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
 parser.add_argument("--continue_training", action="store_true", help="Continue from last checkpoint")
@@ -29,10 +28,9 @@ parser.add_argument("--scale", type=int, help="Scale of the rendered game", defa
 parser.add_argument("--lr", type=float, help="Scale of the rendered game", default=1e-4)
 args = parser.parse_args()
 
-def image_to_grey(obs, target_reso=(84, 84)):
-    return np.dot(cv2.resize(obs[...,:3], dsize=target_reso), [0.2989, 0.5870, 0.1140]).astype('float32')/255.0
-
-prepro = lambda img: imresize(img[35:195].mean(2), (80,80)).astype(np.float32).reshape(1,80,80)/255.
+def image_to_grey(obs, target_reso=(80, 80)):
+    return (np.dot(cv2.resize(obs[...,:3], dsize=target_reso), \
+        [0.2989, 0.5870, 0.1140]).astype('float32')/255.0 + 0.15).round()
 
 # Make the environment
 env = gym.make("WimblepongVisualMultiplayer-v0")
@@ -77,19 +75,22 @@ for i in range(0,episodes):
     # set last element to actual observation
     observations_queue.append(image_to_grey(observation[0]))
 
-    plt.imshow(prepro(observation[0]))
-    plt.show()
 
     total_r = 0
     while not done:
         # Get the actions from both SimpleAIs
         observation_1 = np.stack([observations_queue])
-        action1 = player.select_action(observation_1)
+        # action1 = player.select_action(observation_1)
+        action1 = 0
         action2 = opponent.get_action()
         # Step the environment and get the rewards and new observations
         (ob1, ob2), (rew1, rew2), done, info = env.step((action1, action2))
         player.policy.rewards.append(rew1)
         total_r += rew1
+
+        if T > 10: 
+            plt.imshow(image_to_grey(observation_1))
+            plt.show()
         #img = Image.fromarray(ob1)
         #img.save("ob1.png")
         #img = Image.fromarray(ob2)

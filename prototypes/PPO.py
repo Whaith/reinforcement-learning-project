@@ -40,7 +40,6 @@ class Policy(nn.Module):
 
 # optimizer = optim.RMSprop(policy.parameters(), lr=3e-3)
 # optimizer = RAdam(policy.parameters(), lr=3e-3)
-eps = np.finfo(np.float32).eps.item()
 
 # def reset_globals():
 #     global policy
@@ -57,6 +56,7 @@ class PPO_Agent():
 
     def __init__(self, policy):
         self.gamma = 0.99
+        self.eps = np.finfo(np.float32).eps.item()
         self.batch_update_freq = 30
 
         self.policy = policy
@@ -91,7 +91,7 @@ class PPO_Agent():
             R = r + R*gamma
             returns.insert(0, R)
         returns = torch.tensor(returns)
-        return (returns - returns.mean())/(returns.std() + eps)
+        return (returns - returns.mean())/(returns.std() + self.eps)
 
     def get_experience(self, final_obs=None, done=True):
         state = torch.from_numpy(final_obs).float()
@@ -126,7 +126,7 @@ class PPO_Centralized_Trainer():
         self.policy = policy
         self.clip_val = 0.1
         self.c2 = 0.0001
-        self.optimizer = optim.Adam(self.policy.parameters(), lr=1e-4)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=1e-3)
         self.n_epochs = 3
 
     def train(self, states, old_actions, old_logprobs, returns):
@@ -172,7 +172,8 @@ class PPO_Centralized_Trainer():
 
 
 def run(shared_policy, policy, rank, size):
-    N_eps = 1500
+    ### PPO hyperparameters
+    N_eps = 300
     ep_steps = 500
     group = dist.new_group([i for i in range(size)])
     batch_update_freq = 30
@@ -224,9 +225,9 @@ def run(shared_policy, policy, rank, size):
                     # print('111')
                 if done:
     #                 train_on_batch(0.99, observation, done)
-                    print(i_episode)
+                    print(f"rank: {rank}, episode: {i_episode}")
                     if (i_episode + 1) % 100 == 0:                
-                        if rank == 1: pass#print(i_episode)#print("Episode {} finished after {} timesteps".format(i_episode, t+1))
+                        if rank == 1: print("Episode {} finished after {} timesteps".format(i_episode, t+1))
                     break
             if rank == 1: rewards.append(total_r)
 
@@ -280,12 +281,6 @@ if __name__ == '__main__':
         p = mp.Process(target=init_process, args=(shared_policy, policy, rank, size, run))
         p.start()
         processes.append(p)
-
-    # processes = []
-    # for rank in range(size):
-    #     p = mp.Process(target=run, args=(shared_policy, policy, rank, size))
-    #     p.start() ; processes.append(p)
-    # for p in processes: p.join()
 
     for p in processes:
         p.join()

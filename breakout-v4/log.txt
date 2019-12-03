@@ -1,0 +1,6 @@
+
+time 00h 31m 05s, episodes 21073, frames 1.1M, mean epr -8.24, run loss 139.96
+time 00h 32m 05s, episodes 21336, frames 1.2M, mean epr -7.26, run loss 147.83
+time 00h 33m 05s, episodes 21565, frames 1.2M, mean epr -7.14, run loss 144.29
+time 00h 34m 05s, episodes 21795, frames 1.2M, mean epr -7.60, run loss 146.99
+time 00h 35m 05s, episodes 22023, frames 1.3M, mean epr -8.34, run loss 130.94

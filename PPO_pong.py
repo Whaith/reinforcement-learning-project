@@ -156,7 +156,7 @@ class PPO_Centralized_Trainer():
         self.optimizer = optim.Adam(self.policy.parameters(), lr=ADAM_LR)
         self.n_epochs = N_EPOCHS
 
-    def train(self, states, old_actions, old_logprobs, returns, hiddens, alpha):
+    def train(self, states, old_actions, old_logprobs, returns, hiddens, alpha=None):
         
         # print('processing experience')
         for i in range(self.n_epochs):
@@ -173,7 +173,8 @@ class PPO_Centralized_Trainer():
 
 
             # anneal the clip value
-            self.clip_val = CLIP_PARAM*alpha
+            if alpha != None:
+                self.clip_val = CLIP_PARAM*alpha
 
             # surrogate loss
             advantage = returns - v.detach()
@@ -186,9 +187,9 @@ class PPO_Centralized_Trainer():
 
             # the total_loss
             loss_total = loss_vf + loss_surr + loss_entropy
-            
-            for g in self.optimizer.param_groups:
-                g['lr'] = ADAM_LR*alpha
+            if alpha != None:
+                for g in self.optimizer.param_groups:
+                    g['lr'] = ADAM_LR*alpha
             # step
             self.optimizer.zero_grad()
             loss_total.backward()

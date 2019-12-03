@@ -34,23 +34,7 @@ class Policy(nn.Module):
         state_values = self.value_head(x)
         return F.softmax(action_scores, dim=-1), state_values.squeeze()
 
-# policy = Policy()
-# policy_old = Policy()
-# policy_old.load_state_dict(policy.state_dict())
 
-# optimizer = optim.RMSprop(policy.parameters(), lr=3e-3)
-# optimizer = RAdam(policy.parameters(), lr=3e-3)
-
-# def reset_globals():
-#     global policy
-#     global policy_old
-#     global optimizer
-    
-    # policy = Policy()
-    # policy_old = Policy()
-    # policy_old.load_state_dict(policy.state_dict())
-    
-    # optimizer = optim.RMSprop(policy.parameters(), lr=3e-3)
 
 class PPO_Agent():
 
@@ -60,8 +44,6 @@ class PPO_Agent():
         self.batch_update_freq = 30
 
         self.policy = policy
-        # self.policy_old = Policy()
-        # self.policy_old.load_state_dict(self.policy.state_dict())
 
         self.actions = []
         self.logprobs = []
@@ -77,7 +59,7 @@ class PPO_Agent():
         self.actions.append(action.item())
         self.logprobs.append(m.log_prob(action).item())
         self.states.append(state)
-    #     policy.saved_actions.append(SavedAction(m.log_prob(action), state_value))
+
         return action.item()
 
     "GIVEN rewards array from rollout return the returns with zero mean and unit std"        
@@ -97,17 +79,14 @@ class PPO_Agent():
         state = torch.from_numpy(final_obs).float()
         _, state_value = self.policy(state)
         final_value = state_value.detach() if not done else 0.0
-        
+
         # rewards
         returns = self.discount_rewards(self.rewards, \
             self.dones, self.gamma, final_value)
         
         states = torch.stack(self.states).float()
-    #     print(states.shape)
         old_actions = self.actions
-    #     print(old_actions)
         old_logprobs = torch.tensor(self.logprobs).float()
-    #     print(old_logprobs.shape)
         # print('collected experience')
         return states, torch.tensor(old_actions), old_logprobs, returns
 
@@ -130,10 +109,8 @@ class PPO_Centralized_Trainer():
         self.n_epochs = 3
 
     def train(self, states, old_actions, old_logprobs, returns):
-        # pass
+
         # print('processing experience')
-        # return
-         # PPO OLD VALUES
         for i in range(self.n_epochs):
             # Calculate needed values    
             p, v = policy.forward(states)
@@ -162,17 +139,10 @@ class PPO_Centralized_Trainer():
             self.optimizer.step()
 
         self.shared_policy.load_state_dict(self.policy.state_dict())
-        # print('trained_on_experience')
+
         dist.barrier()
 
-# N_EPS = 1500
-
-# rewards_PPO = learn_PPO_single_threaded(N_EPS, 500)
-# plt.plot(moving_average(rewards_PPO, 150), label='RMSprop')
-
-
 def run(shared_policy, policy, rank, size):
-    ### PPO hyperparameters
     N_eps = 300
     ep_steps = 500
     group = dist.new_group([i for i in range(size)])
@@ -198,21 +168,8 @@ def run(shared_policy, policy, rank, size):
 
                 if rank == 1: total_r += reward
                 if T % batch_update_freq == 0:
-                    # pass experience to the centralized trainer:
-                    # states, old_actions, old_logprobs, returns = agent.get_experience(observation, done)
+
                     a,b,c,d = agent.get_experience(observation, done)
-                    # print(f"""
-                    #     a: {a}, shape: {a.shape}, {a.dtype} # torch.float32, 30,4
-                    #     b: {b}, shape: {b.shape}, {b.dtype} # torch.int64, 30
-                    #     c: {c}, shape: {c.shape}, {c.dtype} # torch.float32, 30
-                    #     d: {d}, shape: {d.shape}, {d.dtype} # torch.float32, 30
-                    # """)
-                    # assert a.shape[0] == batch_update_freq, "qqqq"
-                    # assert b.shape[0] == batch_update_freq, "zzzzz"
-                    # assert c.shape[0] == batch_update_freq, 'ggggg'
-                    # assert d.shape[0] == batch_update_freq, "ooooooo"
-                    # print(a.shape, b.shape, c.shape, d.shape)
-                    
                     dist.gather(a, gather_list=[], dst=0, group=group)
                     # dist.barrier()
                     dist.gather(b, gather_list=[], dst=0, group=group)
@@ -222,15 +179,12 @@ def run(shared_policy, policy, rank, size):
                     dist.gather(d, gather_list=[], dst=0, group=group)
                     
                     agent.clear_experience()
-                    # print('111')
                 if done:
-    #                 train_on_batch(0.99, observation, done)
                     print(f"rank: {rank}, episode: {i_episode}")
                     if (i_episode + 1) % 100 == 0:                
                         if rank == 1: print("Episode {} finished after {} timesteps".format(i_episode, t+1))
                     break
             if rank == 1: rewards.append(total_r)
-
         env.close()
     else:
         trainer = PPO_Centralized_Trainer(shared_policy, policy)
@@ -244,18 +198,11 @@ def run(shared_policy, policy, rank, size):
             dist.gather(old_actions[0], gather_list=old_actions, dst=0, group=group)
             dist.gather(old_logprobs[0], gather_list=old_logprobs, dst=0, group=group)
             dist.gather(old_returns[0], gather_list=old_returns, dst=0, group=group)
-            # print('----------')
             states = torch.cat(old_states[1:])
-            # print(states.shape)
             actions = torch.cat(old_actions[1:])
-            # print(actions.shape)
             logprobs = torch.cat(old_logprobs[1:])
-            # print(logprobs.shape)
             returns = torch.cat(old_returns[1:])
-            # print(returns.shape)
             trainer.train(states, actions, logprobs, returns)
-            # pass
-            # dist.barrier()
 
 
 def init_process(shared_policy, policy, rank, size, fn, backend='gloo'):

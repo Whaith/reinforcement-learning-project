@@ -1,6 +1,7 @@
-import torch
 import math
 from torch.optim.optimizer import Optimizer, required
+import torch
+import numpy as np
 
 def discount_rewards(r, gamma):
     discounted_r = torch.zeros_like(r)
@@ -33,6 +34,9 @@ def hard_update(target, source):
     """
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data)
+
+def moving_average(x, N):
+    return np.convolve(x, np.ones(N, ), mode='valid') / N
 
 class RAdam(Optimizer):
 

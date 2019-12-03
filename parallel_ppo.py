@@ -37,16 +37,14 @@ env = gym.make("WimblepongVisualMultiplayer-v0")
 env.unwrapped.scale = args.scale
 env.unwrapped.fps = args.fps
 N_ACTIONS = env.action_space.n
-N_STACKED_FRAMES = 3
-IMAGE_DIMS = (84, 84)
+
 # Number of episodes/games to play
 episodes = 10000000
 # Define the player IDs for both SimpleAI agents
 player_id = 1
 opponent_id = 3 - player_id
 opponent = wimblepong.SimpleAi(env, opponent_id)
-player = PPO_Agent(policy=CNN_policy, policy_kwargs={'num_actions': N_ACTIONS}, \
-    lr=args.lr, df=0.999)
+player = 
 if args.continue_training:
     player.load_model()
 # Set the names for both SimpleAIs

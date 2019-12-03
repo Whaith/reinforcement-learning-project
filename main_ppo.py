@@ -88,9 +88,9 @@ for i in range(0,episodes):
         player.policy.rewards.append(rew1)
         total_r += rew1
 
-        if T > 10: 
-            plt.imshow(image_to_grey(observation_1))
-            plt.show()
+        # if T > 10: 
+        #     plt.imshow(image_to_grey(observation_1))
+        #     plt.show()
         #img = Image.fromarray(ob1)
         #img.save("ob1.png")
         #img = Image.fromarray(ob2)

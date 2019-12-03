@@ -335,6 +335,7 @@ if __name__ == '__main__':
     info = {k: torch.DoubleTensor([0]).share_memory_() for k in ['run_epr', 'episodes', 'frames']}
     args = get_args()
     args.save_dir = '{}/'.format(args.env.lower()) # keep the directory structure simple
+    os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None # make dir to save models etc.
     size = num_agents + 1
     processes = []
     

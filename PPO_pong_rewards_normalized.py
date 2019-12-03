@@ -41,7 +41,6 @@ def get_args():
     parser.add_argument('--hidden', default=256, type=int, help='hidden size of GRU')
     return parser.parse_args()
 
-T_HORIZON = 128
 ADAM_LR = 2.5e-4 # TODO ANNEAL this over the training to 0
 N_EPOCHS = 3
 DF = 0.989
@@ -52,7 +51,8 @@ MEM_SIZE = 256
 IMAGE_H_W = 80
 
 # V2 hyperparams
-BATCH_SIZE = 128
+BATCH_SIZE = 64
+N_ROLLOUTS = 10
 
 def image_to_grey(obs, target_reso=(80, 80)):
     # print('here lol')
@@ -162,17 +162,20 @@ class PPO_Centralized_Trainer():
     def train(self, states, old_actions, old_logprobs, returns, hiddens, alpha=None):
         
         # print('processing experience')
-        for i in range(self.n_epochs):
+        # PPO OLD VALUES
+        n_iterations = int(len(states)/BATCH_SIZE * N_EPOCHS)
+        for i in range(n_iterations):
+            idxs = np.random.randint(0, len(states), BATCH_SIZE)
             # Calculate needed values    
             # print('qqqqq', states.shape, hiddens.shape)
-            p, v, _ = policy.forward((states, hiddens))
+            p, v, _ = policy.forward((states[idxs], hiddens[idxs]))
 
             m = Categorical(p)
-            c = m.log_prob(old_actions)
+            c = m.log_prob(old_actions[idxs])
             entr = m.entropy()
 
             # value fn loss
-            loss_vf = F.mse_loss(v.squeeze(-1), returns.squeeze(-1))
+            loss_vf = F.mse_loss(v.squeeze(-1), returns.squeeze(-1)[idxs])
 
 
             # anneal the clip value
@@ -180,11 +183,10 @@ class PPO_Centralized_Trainer():
                 self.clip_val = CLIP_PARAM*alpha
 
             # surrogate loss
-            advantage = returns - v.detach()
-            r_ts = torch.exp(c - old_logprobs)
+            advantage = returns[idxs] - v.detach()
+            r_ts = torch.exp(c - old_logprobs[idxs])
             loss_surr = - (torch.min(r_ts * advantage, \
                 torch.clamp(r_ts, 1-self.clip_val, 1+self.clip_val) * advantage)).mean()
-            
             # maximize entropy bonus
             loss_entropy = - self.c2 * entr.mean()
 
@@ -227,7 +229,7 @@ def run(shared_policy, policy, rank, size, info, args):
             done = True
             hx = torch.zeros(1, MEM_SIZE) if done else hx.detach()
             epr = 0
-            while True:
+            for t in range(4e4):
                 T += 1
                 # print('INFO',info)
                 info['frames'].add_(1)
@@ -237,37 +239,42 @@ def run(shared_policy, policy, rank, size, info, args):
                 action, hx = agent.select_action((image_to_grey(observation), hx))
                 observation, reward, done, _ = env.step(action)
                 # check that the reward is always non zero
-                if np.abs(reward) < 5:
-                    reward = 0.01
-                agent.rewards.append(reward)
                 epr += reward
+                agent.rewards.append(reward)
                 agent.dones.append(done)
+                if done:
+                    st = t+1
+                    rw = epr / st
+                    rw += np.abs(rw)/10
+                    agent.rewards[-st:]
+                    for i in range(1, st+1):
+                        policy.rewards[-i] = rw
 
                 if rank == 1: total_r += reward
-                if T % batch_update_freq == 0:
-                    next_obs = (image_to_grey(observation), hx)
-                    a,b,c,d,h = agent.get_experience(next_obs, done)
-                    # print(a.size(), a.dtype)
-                    # print(h.size(), h.dtype)
-                    # print(f"""
-                    # a: {a[0]}, {a.size()} \n
-                    # b: {b}, {b.size()} \n
-                    # c: {c}, {c.size()} \n
-                    # h: {d}, {d.size()} \n
-                    # d: {h[0]}, {h.size()} \n
-                    # """)
-                    dist.gather(a, gather_list=[], dst=0, group=group)
-                    # dist.barrier()
-                    dist.gather(b, gather_list=[], dst=0, group=group)
-                    # dist.barrier()
-                    dist.gather(c, gather_list=[], dst=0, group=group)
-                    # # dist.barrier()
-                    dist.gather(d, gather_list=[], dst=0, group=group)
-                    # print('HIDDENS shape: ', h, h.shape)
-                    dist.gather(h, gather_list=[], dst=0, group=group)
-                    
-                    agent.clear_experience()
-
+                if done:
+                    if (i_episode + 1) % N_ROLLOUTS == 0:
+                        next_obs = (image_to_grey(observation), hx)
+                        a,b,c,d,h = agent.get_experience(next_obs, done)
+                        # print(a.size(), a.dtype)
+                        # print(h.size(), h.dtype)
+                        # print(f"""
+                        # a: {a[0]}, {a.size()} \n
+                        # b: {b}, {b.size()} \n
+                        # c: {c}, {c.size()} \n
+                        # h: {d}, {d.size()} \n
+                        # d: {h[0]}, {h.size()} \n
+                        # """)
+                        dist.gather(a, gather_list=[], dst=0, group=group)
+                        # dist.barrier()
+                        dist.gather(b, gather_list=[], dst=0, group=group)
+                        # dist.barrier()
+                        dist.gather(c, gather_list=[], dst=0, group=group)
+                        # # dist.barrier()
+                        dist.gather(d, gather_list=[], dst=0, group=group)
+                        # print('HIDDENS shape: ', h, h.shape)
+                        dist.gather(h, gather_list=[], dst=0, group=group)
+                        
+                        agent.clear_experience()
                 if num_frames % int(2e6) == 0:
                     printlog(args, '\n\t{:.0f}M frames: saved model\n'.format(num_frames/1e6))
                     torch.save(shared_policy.state_dict(), args.save_dir+'model.{:.0f}.tar'.format(num_frames/1e6))

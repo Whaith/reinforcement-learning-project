@@ -52,7 +52,7 @@ MEM_SIZE = 256
 IMAGE_H_W = 80
 
 def image_to_grey(obs, target_reso=(80, 80)):
-    print('here lol')
+    # print('here lol')
     return (np.dot(cv2.resize(obs[...,:3], dsize=target_reso), \
         [0.2989, 0.5870, 0.1140]).astype('float32')/255.0 + 0.15).round()
 
@@ -94,7 +94,7 @@ class PPO_Agent():
         self.hiddens = []
         
     def select_action(self, state):
-        print(len(state))
+        # print(len(state))
         state, hx_0  = state
         state = torch.from_numpy(state).view(1, 1, IMAGE_H_W, IMAGE_H_W)
         probs, _, hx = self.policy.forward((state, hx_0.detach()))
@@ -243,8 +243,8 @@ def run(shared_policy, policy, rank, size, info, args):
                 if T % batch_update_freq == 0:
                     next_obs = (image_to_grey(observation), hx)
                     a,b,c,d,h = agent.get_experience(next_obs, done)
-                    print(a.size(), a.dtype)
-                    print(h.size(), h.dtype)
+                    # print(a.size(), a.dtype)
+                    # print(h.size(), h.dtype)
                     # print(f"""
                     # a: {a[0]}, {a.size()} \n
                     # b: {b}, {b.size()} \n
@@ -309,7 +309,7 @@ def run(shared_policy, policy, rank, size, info, args):
             logprobs = torch.cat(old_logprobs[1:])
             returns = torch.cat(old_returns[1:])
             hiddens = torch.cat(old_hiddens[1:])
-            print(states.shape, actions.shape, logprobs.shape, returns.shape, hiddens.shape)
+            # print(states.shape, actions.shape, logprobs.shape, returns.shape, hiddens.shape)
             trainer.train(states, actions, logprobs, returns, hiddens, scheduler.value(num_frames))
 
 def init_process(shared_policy, policy, rank, size, fn, info, args, backend='gloo'):

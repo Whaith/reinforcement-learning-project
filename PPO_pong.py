@@ -207,6 +207,7 @@ def run(shared_policy, policy, rank, size, info, args):
     group = dist.new_group([i for i in range(size)])
     batch_update_freq = T_HORIZON
     # Agent getting the training data
+
     if rank != 0:
         env = gym.make("WimblepongVisualSimpleAI-v0")
         action_space = env.action_space.n
@@ -215,12 +216,12 @@ def run(shared_policy, policy, rank, size, info, args):
         T = 0
         agent = PPO_Agent(shared_policy)
         # if rank == 1: rewards_deque = deque([0], maxlen=1000)
-        last_disp_time = time.time()
+        start_time = last_disp_time = time.time()
         for i_episode in range(N_eps):
             observation = env.reset()
             if rank == 1: total_r = 0
             done = True
-            hx = torch.zeros(1, 256) if done else hx.detach()
+            hx = torch.zeros(1, MEM_SIZE) if done else hx.detach()
             epr = 0
             while True:
                 T += 1

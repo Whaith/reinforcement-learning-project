@@ -24,6 +24,27 @@ def soft_update(target, source, tau):
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
+# source: https://stable-baselines.readthedocs.io/en/master/_modules/stable_baselines/common/schedules.html#ConstantSchedule
+class LinearSchedule():
+    """
+    Linear interpolation between initial_p and final_p over
+    schedule_timesteps. After this many timesteps pass final_p is
+    returned.
+
+    :param schedule_timesteps: (int) Number of timesteps for which to linearly anneal initial_p to final_p
+    :param initial_p: (float) initial output value
+    :param final_p: (float) final output value
+    """
+
+    def __init__(self, schedule_timesteps, final_p, initial_p=1.0):
+        self.schedule_timesteps = schedule_timesteps
+        self.final_p = final_p
+        self.initial_p = initial_p
+
+    def value(self, step):
+        fraction = min(float(step) / self.schedule_timesteps, 1.0)
+        return self.initial_p + fraction * (self.final_p - self.initial_p)
+
 # https://github.com/ikostrikov/pytorch-ddpg-naf/blob/master/ddpg.py#L15
 def hard_update(target, source):
     """

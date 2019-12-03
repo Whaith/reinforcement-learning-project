@@ -22,6 +22,9 @@ import wimblepong
 import argparse
 import time
 from prototypes.utils import LinearSchedule
+from tensorboardX import SummaryWriter
+
+
 
 def get_args():
     parser = argparse.ArgumentParser(description=None)
@@ -208,7 +211,7 @@ def run(shared_policy, policy, rank, size, info, args):
         env = gym.make("WimblepongVisualSimpleAI-v0")
         action_space = env.action_space.n
         env.seed(rank) ; torch.manual_seed(rank) # seed everything
-
+        if rank == 1: writer = SummaryWriter()
         T = 0
         agent = PPO_Agent(shared_policy)
         # if rank == 1: rewards_deque = deque([0], maxlen=1000)
@@ -265,10 +268,13 @@ def run(shared_policy, policy, rank, size, info, args):
                     torch.save(shared_policy.state_dict(), args.save_dir+'model.{:.0f}.tar'.format(num_frames/1e6))
 
                 if rank == 1 and time.time() - last_disp_time > 60: # print info ~ every minute
+                    if rank == 1: writer.add_scalar('running reward', info['run_epr'].item(), num_frames)
                     elapsed = time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - start_time))
                     printlog(args, 'time {}, episodes {:.0f}, frames {:.1f}M, mean epr {:.2f}'
                         .format(elapsed, info['episodes'].item(), num_frames/1e6,
                         info['run_epr'].item()))
+                    last_disp_time = time.time()
+
 
                 if done:
                     info['episodes'] += 1

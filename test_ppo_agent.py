@@ -56,7 +56,8 @@ for i in range(0,episodes):
     while not done:
         # Get the actions from both SimpleAIs
         action1, hidden = player.select_action((image_to_grey(ob1), hidden.detach()))
-        action2, hidden2 = player.select_action((image_to_grey(ob2), hidden2.detach()))
+        # action2, hidden2 = player.select_action((image_to_grey(ob2), hidden2.detach()))
+        action2 = opponent.get_action()
         # Step the environment and get the rewards and new observations
         (ob1, ob2), (rew1, rew2), done, info = env.step((action1, action2))
         #img = Image.fromarray(ob1)

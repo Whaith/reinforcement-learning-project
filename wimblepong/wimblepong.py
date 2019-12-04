@@ -232,7 +232,7 @@ class Wimblepong(gym.core.Env):
         self.frameskip = 2, 5
 
         # Load scoreboard font
-        # self.scoreboard_font = self.load_font()
+        self.scoreboard_font = self.load_font()
 
         # Initialize screen
         self.screen = None                              # Screen object used for rendering

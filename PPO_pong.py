@@ -15,7 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
-import cv2
+import cv2, glob
 import torch.multiprocessing as mp
 import torch.distributed as dist
 import wimblepong
@@ -79,9 +79,18 @@ class NNPolicy(nn.Module): # an actor-critic neural network
         hx = self.gru(x.view(-1, 32 * 5 * 5), (hx))
         return F.softmax(self.actor_linear(hx), -1), self.critic_linear(hx), hx
 
+    def try_load(self, save_dir):
+        paths = glob.glob(save_dir + '*.tar') ; step = 0
+        if len(paths) > 0:
+            ckpts = [int(s.split('.')[-2]) for s in paths]
+            ix = np.argmax(ckpts) ; step = ckpts[ix]
+            self.load_state_dict(torch.load(paths[ix]))
+        print("\tno saved models") if step is 0 else print("\tloaded model: {}".format(paths[ix]))
+        return step
+
+
 
 class PPO_Agent():
-
     def __init__(self, policy):
         self.gamma = DF
         self.eps = np.finfo(np.float32).eps.item()
@@ -95,19 +104,22 @@ class PPO_Agent():
         self.dones = []
         self.states = []
         self.hiddens = []
+    
+    def get_name(self):
+        return "Ping Ping Ong"
         
-    def select_action(self, state):
+    def select_action(self, state, save_values=True):
         # print(len(state))
         state, hx_0  = state
         state = torch.from_numpy(state).view(1, 1, IMAGE_H_W, IMAGE_H_W)
         probs, _, hx = self.policy.forward((state, hx_0.detach()))
         m = Categorical(probs)
         action = m.sample()
-        self.actions.append(action.item())
-        self.logprobs.append(m.log_prob(action).item())
-        self.states.append(state)
-        self.hiddens.append(hx_0)
-
+        if save_values:
+            self.actions.append(action.item())
+            self.logprobs.append(m.log_prob(action).item())
+            self.states.append(state)
+            self.hiddens.append(hx_0)
         return action.item(), hx
 
     "GIVEN rewards array from rollout return the returns with zero mean and unit std"        
@@ -325,7 +337,11 @@ def init_process(shared_policy, policy, rank, size, fn, info, args, backend='glo
     dist.init_process_group(backend, rank=rank, world_size=size)
     fn(shared_policy, policy, rank, size, info, args)
 
+def evaluate_model():
+    pass
+
 if __name__ == '__main__':
+    args = get_args()
 
     num_agents = N_ACTORS
     # one thread 0 is reserved for centralized learner
@@ -335,9 +351,9 @@ if __name__ == '__main__':
     shared_policy.share_memory()
     policy = NNPolicy(1, MEM_SIZE, env.action_space.n)
     policy.load_state_dict(shared_policy.state_dict())
-
+    
     info = {k: torch.DoubleTensor([0]).share_memory_() for k in ['run_epr', 'episodes', 'frames']}
-    args = get_args()
+
     args.save_dir = '{}/'.format(args.env.lower()) # keep the directory structure simple
     os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None # make dir to save models etc.
     size = num_agents + 1

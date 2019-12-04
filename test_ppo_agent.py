@@ -39,18 +39,24 @@ policy = NNPolicy(1, 256, env.action_space.n)
 policy.try_load(args.load_dir)
 player = PPO_Agent(policy)
 
+
+policy2 = NNPolicy(1, 256, env.action_space.n)
+policy2.try_load(args.load_dir)
+player2 = PPO_Agent(policy)
+
 # Set the names for both SimpleAIs
 env.set_names(player.get_name(), opponent.get_name())
 
 win1 = 0
 for i in range(0,episodes):
     hidden = torch.zeros(1, mem_size)
+    hidden2 = torch.zeros(1, mem_size)
     done = False
     (ob1, ob2) = env.reset()
     while not done:
         # Get the actions from both SimpleAIs
         action1, hidden = player.select_action((image_to_grey(ob1), hidden.detach()))
-        action2 = opponent.get_action()
+        action2, hidden2 = player.select_action((image_to_grey(ob2), hidden2.detach()))
         # Step the environment and get the rewards and new observations
         (ob1, ob2), (rew1, rew2), done, info = env.step((action1, action2))
         #img = Image.fromarray(ob1)

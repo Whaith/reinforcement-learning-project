@@ -71,3 +71,4 @@ time 01h 07m 09s, episodes 13665, frames 44.5M, mean epr -0.01, run loss 197.84
 time 01h 08m 09s, episodes 13837, frames 44.5M, mean epr -0.08, run loss 232.40
 time 01h 09m 09s, episodes 14022, frames 44.6M, mean epr 0.34, run loss 213.82
 time 01h 10m 09s, episodes 14205, frames 44.6M, mean epr -0.51, run loss 198.33
+time 02h 17m 18s, episodes 25119, frames 47.1M, mean epr 1.09, run loss 203.04

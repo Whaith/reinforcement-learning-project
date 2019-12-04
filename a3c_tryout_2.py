@@ -107,7 +107,7 @@ def train(shared_model, shared_optimizer, rank, args, info):
     env.seed(args.seed + rank) ; torch.manual_seed(args.seed + rank) # seed everything
     model = NNPolicy(channels=1, memsize=args.hidden, num_actions=args.num_actions) # a local/unshared model
     state, state2 = env.reset()
-    state, state2 = prepro(state), prepro(state2)
+    state, state2 = torch.tensor(prepro(state)), torch.tensor(prepro(state2))
     opponent_id = 2
     opponent = wimblepong.SimpleAi(env, opponent_id)
     use_simpleAI = True
@@ -133,12 +133,13 @@ def train(shared_model, shared_optimizer, rank, args, info):
             # (ob1, ob2), (rew1, rew2), done, info = env.step((action1, action2))f 
             action_ = opponent.get_action()
             if not use_simpleAI:
-                woth torch.no_grad()
+                with torch.no_grad():
                     value_, logit_, hx_ = model((state2.view(1,1,80,80), hx_))
                     logp_ = F.log_softmax(logit_, dim=-1)
                     action_ = torch.exp(logp_).multinomial(num_samples=1).data[0]#logp.max(1)[1].data if args.test else
                     action_ = action_.numpy()[0]
 
+            # print(type(state))
             value, logit, hx = model((state.view(1,1,80,80), hx))
             logp = F.log_softmax(logit, dim=-1)
             action = torch.exp(logp).multinomial(num_samples=1).data[0]#logp.max(1)[1].data if args.test else
@@ -165,7 +166,7 @@ def train(shared_model, shared_optimizer, rank, args, info):
                     running_winrate.append(0)
 
                 strong_ai_prob = np.sum(running_winrate)/len(running_winrate)
-                use_simpleAI = torch.rand(1).item() >= strong_ai_prob:
+                use_simpleAI = torch.rand(1).item() >= strong_ai_prob
 
                 info['episodes'] += 1
                 interp = 1 if info['episodes'][0] == 1 else 1 - args.horizon
@@ -184,9 +185,9 @@ def train(shared_model, shared_optimizer, rank, args, info):
                 hx_ = torch.zeros(1, 256)
                 episode_length, epr, eploss = 0, 0, 0
                 state, state2 = env.reset()
-                state, state2 = prepro(state)
+                state = torch.tensor(prepro(state))
                 if not use_simpleAI:
-                    state2 = prepro(state2)
+                    state2 = torch.tensor(prepro(state2))
 
             values.append(value) ; logps.append(logp) ; actions.append(action) ; rewards.append(reward)
         # print(state.shape)

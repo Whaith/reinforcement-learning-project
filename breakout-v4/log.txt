@@ -1224,5 +1224,80 @@ time 19h 48m 38s, episodes 190386, frames 45.8M, mean epr 1.67, run loss 174.52
 time 19h 49m 38s, episodes 190546, frames 45.8M, mean epr 0.49, run loss 190.40
 time 19h 50m 38s, episodes 190707, frames 45.8M, mean epr 0.80, run loss 176.31
 time 19h 51m 38s, episodes 190867, frames 45.9M, mean epr 0.13, run loss 177.86
+<<<<<<< Updated upstream
 time 20h 57m 47s, episodes 201134, frames 48.6M, mean epr -0.95, run loss 182.56
 time 20h 58m 47s, episodes 201267, frames 48.6M, mean epr 0.44, run loss 181.41
+=======
+time 19h 52m 38s, episodes 191037, frames 45.9M, mean epr -0.67, run loss 177.50
+time 19h 53m 38s, episodes 191185, frames 46.0M, mean epr -0.25, run loss 180.06
+
+	46M frames: saved model
+
+time 19h 54m 38s, episodes 191327, frames 46.0M, mean epr 0.03, run loss 165.28
+time 19h 55m 38s, episodes 191479, frames 46.1M, mean epr 0.15, run loss 184.44
+time 19h 56m 39s, episodes 191635, frames 46.1M, mean epr 0.23, run loss 180.53
+time 19h 57m 39s, episodes 191789, frames 46.1M, mean epr -0.07, run loss 189.89
+time 19h 58m 39s, episodes 191929, frames 46.2M, mean epr 2.16, run loss 187.35
+time 19h 59m 39s, episodes 192091, frames 46.2M, mean epr 0.46, run loss 196.96
+time 20h 00m 39s, episodes 192246, frames 46.3M, mean epr -0.18, run loss 176.48
+time 20h 01m 39s, episodes 192403, frames 46.3M, mean epr -1.17, run loss 190.09
+time 20h 02m 40s, episodes 192562, frames 46.3M, mean epr 0.05, run loss 191.24
+time 20h 03m 40s, episodes 192710, frames 46.4M, mean epr 0.36, run loss 186.95
+time 20h 04m 40s, episodes 192872, frames 46.4M, mean epr 0.25, run loss 178.68
+time 20h 05m 40s, episodes 193030, frames 46.5M, mean epr 0.48, run loss 171.68
+time 20h 06m 40s, episodes 193166, frames 46.5M, mean epr 1.35, run loss 183.04
+time 20h 07m 40s, episodes 193309, frames 46.5M, mean epr 0.66, run loss 193.50
+time 20h 08m 40s, episodes 193465, frames 46.6M, mean epr 1.12, run loss 211.16
+time 20h 09m 40s, episodes 193619, frames 46.6M, mean epr 0.37, run loss 189.77
+time 20h 10m 40s, episodes 193774, frames 46.7M, mean epr -0.35, run loss 187.26
+time 20h 11m 40s, episodes 193939, frames 46.7M, mean epr 0.68, run loss 177.64
+time 20h 12m 40s, episodes 194095, frames 46.8M, mean epr -0.21, run loss 179.62
+time 20h 13m 40s, episodes 194251, frames 46.8M, mean epr -0.47, run loss 176.19
+time 20h 14m 40s, episodes 194396, frames 46.8M, mean epr 0.93, run loss 190.63
+time 20h 15m 41s, episodes 194544, frames 46.9M, mean epr -0.78, run loss 179.16
+time 20h 16m 41s, episodes 194692, frames 46.9M, mean epr 0.81, run loss 166.68
+time 20h 17m 41s, episodes 194834, frames 47.0M, mean epr 1.33, run loss 184.66
+time 20h 18m 41s, episodes 194991, frames 47.0M, mean epr 0.15, run loss 194.40
+time 20h 19m 41s, episodes 195144, frames 47.0M, mean epr 0.69, run loss 183.89
+time 20h 20m 41s, episodes 195294, frames 47.1M, mean epr 0.63, run loss 174.72
+time 20h 21m 41s, episodes 195463, frames 47.1M, mean epr -0.16, run loss 193.71
+time 20h 22m 42s, episodes 195615, frames 47.2M, mean epr 1.38, run loss 189.02
+time 20h 23m 42s, episodes 195767, frames 47.2M, mean epr 0.16, run loss 179.84
+time 20h 24m 42s, episodes 195932, frames 47.2M, mean epr -0.12, run loss 179.65
+time 20h 25m 42s, episodes 196076, frames 47.3M, mean epr -0.02, run loss 181.66
+time 20h 26m 42s, episodes 196242, frames 47.3M, mean epr -0.84, run loss 173.82
+time 20h 27m 42s, episodes 196393, frames 47.4M, mean epr -0.67, run loss 172.88
+time 20h 28m 42s, episodes 196544, frames 47.4M, mean epr 0.15, run loss 161.52
+time 20h 29m 42s, episodes 196690, frames 47.5M, mean epr 0.11, run loss 178.49
+time 20h 30m 42s, episodes 196838, frames 47.5M, mean epr -0.28, run loss 171.20
+time 20h 31m 42s, episodes 196986, frames 47.5M, mean epr 0.38, run loss 189.16
+time 20h 32m 43s, episodes 197151, frames 47.6M, mean epr 0.55, run loss 179.98
+time 20h 33m 43s, episodes 197305, frames 47.6M, mean epr 0.32, run loss 179.47
+time 20h 34m 43s, episodes 197473, frames 47.7M, mean epr 0.01, run loss 175.11
+time 20h 35m 43s, episodes 197621, frames 47.7M, mean epr 0.53, run loss 195.36
+time 20h 36m 44s, episodes 197792, frames 47.7M, mean epr 0.15, run loss 183.48
+time 20h 37m 44s, episodes 197951, frames 47.8M, mean epr -0.02, run loss 178.44
+time 20h 38m 44s, episodes 198110, frames 47.8M, mean epr -0.90, run loss 184.46
+time 20h 39m 44s, episodes 198262, frames 47.9M, mean epr 0.22, run loss 174.71
+time 20h 40m 44s, episodes 198419, frames 47.9M, mean epr -0.62, run loss 173.38
+time 20h 41m 44s, episodes 198591, frames 47.9M, mean epr -1.49, run loss 162.08
+time 20h 42m 44s, episodes 198761, frames 48.0M, mean epr -0.46, run loss 191.16
+
+	48M frames: saved model
+
+time 20h 43m 44s, episodes 198928, frames 48.0M, mean epr 0.55, run loss 193.38
+time 20h 44m 44s, episodes 199077, frames 48.1M, mean epr -0.30, run loss 180.57
+time 20h 45m 45s, episodes 199223, frames 48.1M, mean epr -0.15, run loss 188.32
+time 20h 46m 45s, episodes 199379, frames 48.1M, mean epr -1.27, run loss 175.21
+time 20h 47m 45s, episodes 199543, frames 48.2M, mean epr 0.85, run loss 186.39
+time 20h 48m 45s, episodes 199697, frames 48.2M, mean epr -0.33, run loss 194.53
+time 20h 49m 46s, episodes 199857, frames 48.3M, mean epr -0.25, run loss 204.82
+time 20h 50m 46s, episodes 200024, frames 48.3M, mean epr 0.57, run loss 181.65
+time 20h 51m 46s, episodes 200181, frames 48.4M, mean epr 1.04, run loss 185.56
+time 20h 52m 46s, episodes 200348, frames 48.4M, mean epr -1.05, run loss 186.23
+time 20h 53m 46s, episodes 200514, frames 48.4M, mean epr -1.27, run loss 175.56
+time 20h 54m 46s, episodes 200659, frames 48.5M, mean epr 1.68, run loss 191.60
+time 20h 55m 47s, episodes 200817, frames 48.5M, mean epr -0.27, run loss 176.13
+time 20h 56m 47s, episodes 200981, frames 48.6M, mean epr -1.18, run loss 168.12
+>>>>>>> Stashed changes
+time 20h 59m 47s, episodes 201436, frames 48.7M, mean epr 0.05, run loss 174.63

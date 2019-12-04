@@ -44,7 +44,7 @@ def get_args():
 ADAM_LR = 2.5e-4 # TODO ANNEAL this over the training to 0
 N_EPOCHS = 3
 DF = 0.989
-N_ACTORS = 8
+N_ACTORS = 12
 CLIP_PARAM = 0.1 # TODO ANNEAL this over during training to 0
 ENTROPY_C2 = 0.01
 MEM_SIZE = 256
@@ -52,7 +52,7 @@ IMAGE_H_W = 80
 
 # V2 hyperparams
 BATCH_SIZE = 64
-N_ROLLOUTS = 10
+N_ROLLOUTS = 3
 
 def image_to_grey(obs, target_reso=(80, 80)):
     # print('here lol')
@@ -85,7 +85,7 @@ class PPO_Agent():
     def __init__(self, policy):
         self.gamma = DF
         self.eps = np.finfo(np.float32).eps.item()
-        self.batch_update_freq = T_HORIZON
+        # self.batch_update_freq = T_HORIZON
         
         self.policy = policy
 
@@ -211,7 +211,7 @@ def run(shared_policy, policy, rank, size, info, args):
     # print(info['frames'])
     N_eps = int(1e6)
     group = dist.new_group([i for i in range(size)])
-    batch_update_freq = T_HORIZON
+    # batch_update_freq = T_HORIZON
     # Agent getting the training data
 
     if rank != 0:
@@ -229,7 +229,7 @@ def run(shared_policy, policy, rank, size, info, args):
             done = True
             hx = torch.zeros(1, MEM_SIZE) if done else hx.detach()
             epr = 0
-            for t in range(4e4):
+            for t in range(int(4e4)):
                 T += 1
                 # print('INFO',info)
                 info['frames'].add_(1)
@@ -242,14 +242,14 @@ def run(shared_policy, policy, rank, size, info, args):
                 epr += reward
                 agent.rewards.append(reward)
                 agent.dones.append(done)
-                if done:
-                    st = t+1
-                    rw = epr / st
-                    rw += np.abs(rw)/10
-                    agent.rewards[-st:]
-                    for i in range(1, st+1):
-                        policy.rewards[-i] = rw
-                    info['process_batches'][rank] = st
+                # if done:
+                    # st = t+1
+                    # rw = epr / st
+                    # rw += np.abs(rw)/10
+                    # agent.rewards[-st:]
+                    # for i in range(1, st+1):
+                    #     agent.rewards[-i] = rw
+                    # info['process_batches'][rank] = st
 
                 if rank == 1: total_r += reward
                 if done:
@@ -264,8 +264,9 @@ def run(shared_policy, policy, rank, size, info, args):
                         # c: {c}, {c.size()} \n
                         # h: {d}, {d.size()} \n
                         # d: {h[0]}, {h.size()} \n
-                        dist.gather(torch.tensor(len(a), dtype=torch.int64), gather_list=[], group=group)
+                        dist.gather(torch.tensor(len(a), dtype=torch.int64), dst=0, gather_list=[], group=group)
                         # """)
+                        print(a.shape)
                         dist.gather(a, gather_list=[], dst=0, group=group)
                         # dist.barrier()
                         dist.gather(b, gather_list=[], dst=0, group=group)
@@ -311,18 +312,29 @@ def run(shared_policy, policy, rank, size, info, args):
         while(True):
             num_frames = int(info['frames'].item())
             dist.gather(n_values[0], gather_list=n_values, dst=0, group=group)
-            n_values = [t.item() for i in n_values]
+            n_values = [t.item() for t in n_values]
+            print("NVALUES", n_values)
 
             old_states = [torch.zeros((n_values[i], 1, IMAGE_H_W, IMAGE_H_W), dtype=torch.float32) for i in range(size)]
-            old_actions = [torch.zeros((n_values[i]), dtype=torch.int64) for i in range(size)]
+            print([i.shape for i in old_states])
+            old_actions = [torch.zeros(n_values[i], dtype=torch.int64) for i in range(size)]
+            print([i.shape for i in old_actions])
             old_logprobs = [torch.zeros((n_values[i]), dtype=torch.float32) for i in range(size)]
+            print([i.shape for i in old_logprobs])
             old_returns = [torch.zeros((n_values[i]), dtype=torch.float32) for i in range(size)]
+            print([i.shape for i in old_returns])
             old_hiddens = [torch.zeros((n_values[i], MEM_SIZE), dtype=torch.float32) for i in range(size)]
-
+            print([i.shape for i in old_hiddens])
+            
+            dist.gather(old_states[0], gather_list=old_states, dst=0, group=group)
             dist.gather(old_actions[0], gather_list=old_actions, dst=0, group=group)
+            # print('zzzz', [i.shape for i in old_states])
             dist.gather(old_logprobs[0], gather_list=old_logprobs, dst=0, group=group)
+            # print('zzz1', [i.shape for i in old_states])
             dist.gather(old_returns[0], gather_list=old_returns, dst=0, group=group)
+            # print('zzz2', [i.shape for i in old_states])
             dist.gather(old_hiddens[0], gather_list=old_hiddens, dst=0, group=group)
+            # print('zzz3', [i.shape for i in old_states])
 
             states = torch.cat(old_states[1:])
             actions = torch.cat(old_actions[1:])
@@ -344,7 +356,7 @@ def init_process(shared_policy, policy, rank, size, fn, info, args, backend='glo
 
 if __name__ == '__main__':
 
-    num_agents = N_ACTORS
+    num_agents = 2
     # one thread 0 is reserved for centralized learner
     env = gym.make("WimblepongVisualSimpleAI-v0")
 
@@ -359,7 +371,7 @@ if __name__ == '__main__':
     os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None # make dir to save models etc.
     size = num_agents + 1
     processes = []
-    info['process_batches'] = torch.zeros(size).share_memory_()
+    # info['process_batches'] = torch.zeros(size).share_memory_()
     
     for rank in range(size):
         p = mp.Process(target=init_process, args=(shared_policy, policy, rank, size, run, info, args))

@@ -40,7 +40,7 @@ def train(env_name="ContinuousCartPole-v0"):
         # Get action from the agent
         action, action_probabilities = agent.get_action(observation)
         previous_observation = observation
-
+        
         # Perform the action on the environment, get new state and reward
         observation, reward, done, info = env.step(action.detach().numpy())
 

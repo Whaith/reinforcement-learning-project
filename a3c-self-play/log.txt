@@ -246,3 +246,27 @@ time 04h 11m 35s, episodes 42287, frames 51.3M, mean epr 0.25, run loss 196.99
 time 04h 12m 35s, episodes 42434, frames 51.3M, mean epr 0.30, run loss 193.44
 time 04h 13m 35s, episodes 42572, frames 51.4M, mean epr -0.88, run loss 190.29
 time 04h 14m 35s, episodes 42709, frames 51.4M, mean epr 0.77, run loss 211.41
+time 04h 15m 35s, episodes 42849, frames 51.4M, mean epr 1.64, run loss 239.06
+time 04h 16m 35s, episodes 43004, frames 51.5M, mean epr 2.37, run loss 218.72
+time 04h 17m 35s, episodes 43159, frames 51.5M, mean epr 0.30, run loss 206.51
+time 04h 18m 35s, episodes 43314, frames 51.5M, mean epr -0.32, run loss 198.19
+time 04h 19m 35s, episodes 43467, frames 51.6M, mean epr 0.25, run loss 198.11
+time 04h 20m 36s, episodes 43622, frames 51.6M, mean epr 0.40, run loss 203.84
+time 04h 21m 36s, episodes 43784, frames 51.7M, mean epr 1.59, run loss 204.90
+time 04h 22m 36s, episodes 43937, frames 51.7M, mean epr 0.87, run loss 192.75
+time 04h 23m 36s, episodes 44089, frames 51.7M, mean epr 0.55, run loss 205.13
+time 04h 24m 36s, episodes 44233, frames 51.8M, mean epr 0.74, run loss 188.76
+time 04h 25m 37s, episodes 44355, frames 51.8M, mean epr 1.80, run loss 200.66
+time 04h 26m 37s, episodes 44482, frames 51.8M, mean epr -0.11, run loss 198.62
+time 04h 27m 37s, episodes 44618, frames 51.9M, mean epr -0.04, run loss 184.42
+time 04h 28m 37s, episodes 44770, frames 51.9M, mean epr -0.19, run loss 195.28
+time 04h 29m 37s, episodes 44899, frames 51.9M, mean epr 0.72, run loss 199.33
+time 04h 30m 38s, episodes 45056, frames 52.0M, mean epr 0.24, run loss 190.15
+
+	52M frames: saved model
+
+time 04h 31m 38s, episodes 45203, frames 52.0M, mean epr 0.57, run loss 206.12
+time 04h 32m 38s, episodes 45358, frames 52.1M, mean epr -0.00, run loss 204.36
+time 04h 33m 38s, episodes 45504, frames 52.1M, mean epr 0.32, run loss 212.41
+time 04h 34m 38s, episodes 45659, frames 52.1M, mean epr 1.07, run loss 223.10
+time 04h 35m 38s, episodes 45800, frames 52.2M, mean epr 1.86, run loss 219.74

@@ -43,7 +43,7 @@ def get_args():
 
 T_HORIZON = 128
 ADAM_LR = 2.5e-4 # TODO ANNEAL this over the training to 0
-ADAM_LR = 0.0
+# ADAM_LR = 0.0
 N_EPOCHS = 3
 DF = 0.989
 N_ACTORS = 8

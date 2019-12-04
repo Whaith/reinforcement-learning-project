@@ -23,16 +23,16 @@ def get_args():
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     parser.add_argument('--seed', default=1, type=int, help='seed random # generators (for reproducibility)')
     parser.add_argument('--gamma', default=0.99, type=float, help='rewards discount factor')
-    parser.add_argument('--tau', default=1.0, type=float, help='generalized advantage estimation discount')
+    parser.add_argument('--tau', default=95, type=float, help='generalized advantage estimation discount')
     parser.add_argument('--horizon', default=0.99, type=float, help='horizon for running averages')
     parser.add_argument('--hidden', default=256, type=int, help='hidden size of GRU')
     return parser.parse_args()
 
 discount = lambda x, gamma: lfilter([1],[1,-gamma],x[::-1])[::-1] # discounted rewards one liner
-def prepro(obs, target_reso=(80, 80)):
+def prepro(obs, target_reso=(40, 40)):
     # print('here lol')
-    return (np.dot(cv2.resize(obs[...,:3], dsize=target_reso), \
-        [0.2989, 0.5870, 0.1140]).astype('float32')/255.0 + 0.15).round()
+    return np.dot(cv2.resize(obs[...,:3], dsize=target_reso), \
+        [0.2989, 0.5870, 0.1140]).astype('float32')/255.0
         
 def printlog(args, s, end='\n', mode='a'):
     print(s, end=end) ; f=open(args.save_dir+'log.txt',mode) ; f.write(s+'\n') ; f.close()
@@ -44,7 +44,7 @@ class NNPolicy(nn.Module): # an actor-critic neural network
         self.conv2 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
         self.conv3 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
         self.conv4 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
-        self.gru = nn.GRUCell(32 * 5 * 5, memsize)
+        self.gru = nn.GRUCell(32 * 3 * 3, memsize)
         self.critic_linear, self.actor_linear = nn.Linear(memsize, 1), nn.Linear(memsize, num_actions)
 
     def forward(self, inputs, train=True, hard=False):
@@ -54,7 +54,8 @@ class NNPolicy(nn.Module): # an actor-critic neural network
         x = F.elu(self.conv2(x))
         x = F.elu(self.conv3(x))
         x = F.elu(self.conv4(x))
-        hx = self.gru(x.view(-1, 32 * 5 * 5), (hx))
+        # print(x.shape)
+        hx = self.gru(x.view(-1, 32 * 3 * 3), (hx))
         return self.critic_linear(hx), self.actor_linear(hx), hx
 
     def try_load(self, save_dir):
@@ -103,6 +104,7 @@ def cost_func(args, values, logps, actions, rewards):
     return policy_loss + 0.5 * value_loss - 0.01 * entropy_loss
 
 def train(shared_model, shared_optimizer, rank, args, info):
+    if rank == 1: from tensorboardX import SummaryWriter
     env = gym.make("WimblepongVisualMultiplayer-v0")
     env.seed(args.seed + rank) ; torch.manual_seed(args.seed + rank) # seed everything
     model = NNPolicy(channels=1, memsize=args.hidden, num_actions=args.num_actions) # a local/unshared model
@@ -111,12 +113,12 @@ def train(shared_model, shared_optimizer, rank, args, info):
     opponent_id = 2
     opponent = wimblepong.SimpleAi(env, opponent_id)
     use_simpleAI = True
-    
-    running_winrate = deque([1], maxlen=100)
+    if rank == 1: writer = SummaryWriter()
+    running_winrate = deque([0 for i in range(100)], maxlen=100)
 
     start_time = last_disp_time = time.time()
     episode_length, epr, eploss, done  = 0, 0, 0, True # bookkeeping
-
+    if rank == 1: episode_number = 0
 
     while info['frames'][0] <= 8e7 or args.test: # openai baselines uses 40M frames...we'll use 80M
         model.load_state_dict(shared_model.state_dict()) # sync with shared model
@@ -125,22 +127,22 @@ def train(shared_model, shared_optimizer, rank, args, info):
         hx_ = torch.zeros(1, 256) if done else hx_.detach()  # rnn activation vector
         values, logps, actions, rewards = [], [], [], [] # save values for computing gradientss
 
-        for step in range(args.rnn_steps):
-            episode_length += 1
-            # print(state.view(1,1,80,80))
+        ##done = False
+        while args.rnn_steps:
+            # print(state.view(1,1,40,40))
 
             # Step the environment and get the rewards and new observations
             # (ob1, ob2), (rew1, rew2), done, info = env.step((action1, action2))f 
             action_ = opponent.get_action()
             if not use_simpleAI:
                 with torch.no_grad():
-                    value_, logit_, hx_ = model((state2.view(1,1,80,80), hx_))
+                    value_, logit_, hx_ = model((state2.view(1,1,40,40), hx_))
                     logp_ = F.log_softmax(logit_, dim=-1)
                     action_ = torch.exp(logp_).multinomial(num_samples=1).data[0]#logp.max(1)[1].data if args.test else
                     action_ = action_.numpy()[0]
 
             # print(type(state))
-            value, logit, hx = model((state.view(1,1,80,80), hx))
+            value, logit, hx = model((state.view(1,1,40,40), hx))
             logp = F.log_softmax(logit, dim=-1)
             action = torch.exp(logp).multinomial(num_samples=1).data[0]#logp.max(1)[1].data if args.test else
             # state, reward, done, _ = env.step(action.numpy()[0])
@@ -166,8 +168,11 @@ def train(shared_model, shared_optimizer, rank, args, info):
                     running_winrate.append(0)
 
                 strong_ai_prob = np.sum(running_winrate)/len(running_winrate)
-                use_simpleAI = torch.rand(1).item() >= strong_ai_prob
+                # use_simpleAI = torch.rand(1).item() >= strong_ai_prob
+                use_simpleAI = strong_ai_prob <= 0.9
 
+                if rank == 1: writer.add_scalar('winrate', strong_ai_prob, episode_number)
+                if rank == 1: episode_number += 1
                 info['episodes'] += 1
                 interp = 1 if info['episodes'][0] == 1 else 1 - args.horizon
                 info['run_epr'].mul_(1-interp).add_(interp * epr)
@@ -191,7 +196,7 @@ def train(shared_model, shared_optimizer, rank, args, info):
 
             values.append(value) ; logps.append(logp) ; actions.append(action) ; rewards.append(reward)
         # print(state.shape)
-        next_value = torch.zeros(1,1) if done else model((state.view(-1, 1, 80, 80), hx))[0]
+        next_value = torch.zeros(1,1) if done else model((state.view(-1, 1, 40, 40), hx))[0]
         values.append(next_value.detach())
 
         loss = cost_func(args, torch.cat(values), torch.cat(logps), torch.cat(actions), np.asarray(rewards))
@@ -202,6 +207,7 @@ def train(shared_model, shared_optimizer, rank, args, info):
         for param, shared_param in zip(model.parameters(), shared_model.parameters()):
             if shared_param.grad is None: shared_param._grad = param.grad # sync gradients with shared model
         shared_optimizer.step()
+    if rank == 1: wirter.close()
 
 if __name__ == "__main__":
     if sys.version_info[0] > 2:
@@ -222,7 +228,7 @@ if __name__ == "__main__":
 
     info = {k: torch.DoubleTensor([0]).share_memory_() for k in ['run_epr', 'run_loss', 'episodes', 'frames']}
     # CHANGE THIS, temporally using this shit
-    info['frames'] += shared_model.try_load("breakout-v4/") * 1e6
+    info['frames'] += shared_model.try_load(args.env) * 1e6
     if int(info['frames'].item()) == 0: printlog(args,'', end='', mode='w') # clear log file
     
     processes = []

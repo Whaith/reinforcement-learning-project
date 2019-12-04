@@ -284,7 +284,8 @@ class Wimblepong(gym.core.Env):
 
     def load_font(self):
         # Steal matplotlib's default sans font
-        font_file = matplotlib.font_manager.findfont("monospace")
+        # font_file = matplotlib.font_manager.findfont("monospace")
+        font_file = ""
         try:
             font = ImageFont.truetype(font_file, size=10)
         except OSError:

@@ -5,6 +5,7 @@ import torch, os, gym, time, glob, argparse, sys
 import numpy as np
 from scipy.signal import lfilter
 # from scipy.misc import imresize # preserves single-pixel info _unlike_ img = img[::2,::2]
+from collections import deque
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.multiprocessing as mp
@@ -105,30 +106,49 @@ def train(shared_model, shared_optimizer, rank, args, info):
     env = gym.make("WimblepongVisualMultiplayer-v0")
     env.seed(args.seed + rank) ; torch.manual_seed(args.seed + rank) # seed everything
     model = NNPolicy(channels=1, memsize=args.hidden, num_actions=args.num_actions) # a local/unshared model
-    state = torch.tensor(prepro(env.reset())) # get first state
+    state, state2 = env.reset()
+    state, state2 = prepro(state), prepro(state2)
     opponent_id = 2
     opponent = wimblepong.SimpleAi(env, opponent_id)
+    use_simpleAI = True
     
+    running_winrate = deque([1], maxlen=100)
+
     start_time = last_disp_time = time.time()
     episode_length, epr, eploss, done  = 0, 0, 0, True # bookkeeping
+
 
     while info['frames'][0] <= 8e7 or args.test: # openai baselines uses 40M frames...we'll use 80M
         model.load_state_dict(shared_model.state_dict()) # sync with shared model
 
         hx = torch.zeros(1, 256) if done else hx.detach()  # rnn activation vector
+        hx_ = torch.zeros(1, 256) if done else hx_.detach()  # rnn activation vector
         values, logps, actions, rewards = [], [], [], [] # save values for computing gradientss
 
         for step in range(args.rnn_steps):
             episode_length += 1
             # print(state.view(1,1,80,80))
+
+            # Step the environment and get the rewards and new observations
+            # (ob1, ob2), (rew1, rew2), done, info = env.step((action1, action2))f 
+            action_ = opponent.get_action()
+            if not use_simpleAI:
+                woth torch.no_grad()
+                    value_, logit_, hx_ = model((state2.view(1,1,80,80), hx_))
+                    logp_ = F.log_softmax(logit_, dim=-1)
+                    action_ = torch.exp(logp_).multinomial(num_samples=1).data[0]#logp.max(1)[1].data if args.test else
+                    action_ = action_.numpy()[0]
+
             value, logit, hx = model((state.view(1,1,80,80), hx))
             logp = F.log_softmax(logit, dim=-1)
-
             action = torch.exp(logp).multinomial(num_samples=1).data[0]#logp.max(1)[1].data if args.test else
-            state, reward, done, _ = env.step(action.numpy()[0])
+            # state, reward, done, _ = env.step(action.numpy()[0])
+            (state, state2), (reward, reward2), done, _ = env.step((action.numpy()[0], action_))
+
             if args.render: env.render()
 
             state = torch.tensor(prepro(state)) ; epr += reward
+            if not use_simpleAI: state2 = torch.tensor(prepro(state2))
             # reward = np.clip(reward, -1, 1) # reward
 
             done = done or episode_length >= 1e4 # don't playing one ep for too long
@@ -137,8 +157,16 @@ def train(shared_model, shared_optimizer, rank, args, info):
             if num_frames % 2e6 == 0: # save every 2M frames
                 printlog(args, '\n\t{:.0f}M frames: saved model\n'.format(num_frames/1e6))
                 torch.save(shared_model.state_dict(), args.save_dir+'model.{:.0f}.tar'.format(num_frames/1e6))
-
+            
             if done: # update shared data
+                if reward == 10:
+                    running_winrate.append(1)
+                else:
+                    running_winrate.append(0)
+
+                strong_ai_prob = np.sum(running_winrate)/len(running_winrate)
+                use_simpleAI = torch.rand(1).item() >= strong_ai_prob:
+
                 info['episodes'] += 1
                 interp = 1 if info['episodes'][0] == 1 else 1 - args.horizon
                 info['run_epr'].mul_(1-interp).add_(interp * epr)
@@ -152,8 +180,13 @@ def train(shared_model, shared_optimizer, rank, args, info):
                 last_disp_time = time.time()
 
             if done: # maybe print info.
+                hx = torch.zeros(1, 256)
+                hx_ = torch.zeros(1, 256)
                 episode_length, epr, eploss = 0, 0, 0
-                state = torch.tensor(prepro(env.reset()))
+                state, state2 = env.reset()
+                state, state2 = prepro(state)
+                if not use_simpleAI:
+                    state2 = prepro(state2)
 
             values.append(value) ; logps.append(logp) ; actions.append(action) ; rewards.append(reward)
         # print(state.shape)
@@ -187,7 +220,8 @@ if __name__ == "__main__":
     shared_optimizer = SharedAdam(shared_model.parameters(), lr=args.lr)
 
     info = {k: torch.DoubleTensor([0]).share_memory_() for k in ['run_epr', 'run_loss', 'episodes', 'frames']}
-    info['frames'] += shared_model.try_load(args.save_dir) * 1e6
+    # CHANGE THIS, temporally using this shit
+    info['frames'] += shared_model.try_load("breakout-v4/") * 1e6
     if int(info['frames'].item()) == 0: printlog(args,'', end='', mode='w') # clear log file
     
     processes = []

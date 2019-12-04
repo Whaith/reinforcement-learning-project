@@ -249,6 +249,7 @@ def run(shared_policy, policy, rank, size, info, args):
                     agent.rewards[-st:]
                     for i in range(1, st+1):
                         policy.rewards[-i] = rw
+                    info['process_batches'][rank] = st
 
                 if rank == 1: total_r += reward
                 if done:
@@ -263,6 +264,7 @@ def run(shared_policy, policy, rank, size, info, args):
                         # c: {c}, {c.size()} \n
                         # h: {d}, {d.size()} \n
                         # d: {h[0]}, {h.size()} \n
+                        dist.gather(torch.tensor(len(a), dtype=torch.int64), gather_list=[], group=group)
                         # """)
                         dist.gather(a, gather_list=[], dst=0, group=group)
                         # dist.barrier()
@@ -301,25 +303,33 @@ def run(shared_policy, policy, rank, size, info, args):
         env.close()
     # centralized actor training on the training data
     else:
-        trainer = PPO_Centralized_Trainer(shared_policy, policy)
-        old_states = [torch.zeros((T_HORIZON, 1, IMAGE_H_W, IMAGE_H_W), dtype=torch.float32) for i in range(size)]
-        old_actions = [torch.zeros((T_HORIZON), dtype=torch.int64) for i in range(size)]
-        old_logprobs = [torch.zeros((T_HORIZON), dtype=torch.float32) for i in range(size)]
-        old_returns = [torch.zeros((T_HORIZON), dtype=torch.float32) for i in range(size)]
-        old_hiddens = [torch.zeros((T_HORIZON, MEM_SIZE), dtype=torch.float32) for i in range(size)]
-        scheduler = LinearSchedule(60e6, final_p = 0.3, initial_p= 1.0)
+        trainer = PPO_Centralized_Trainer(shared_policy, policy)\
+        # TODO change this to receive the better rewards
+        n_values = [torch.ones(1, dtype=torch.int64) for i in range(size)]
+        scheduler = LinearSchedule(60e6, final_p = 0.3, initial_p= 1.0)   
+
         while(True):
             num_frames = int(info['frames'].item())
-            dist.gather(old_states[0], gather_list=old_states, dst=0, group=group)
+            dist.gather(n_values[0], gather_list=n_values, dst=0, group=group)
+            n_values = [t.item() for i in n_values]
+
+            old_states = [torch.zeros((n_values[i], 1, IMAGE_H_W, IMAGE_H_W), dtype=torch.float32) for i in range(size)]
+            old_actions = [torch.zeros((n_values[i]), dtype=torch.int64) for i in range(size)]
+            old_logprobs = [torch.zeros((n_values[i]), dtype=torch.float32) for i in range(size)]
+            old_returns = [torch.zeros((n_values[i]), dtype=torch.float32) for i in range(size)]
+            old_hiddens = [torch.zeros((n_values[i], MEM_SIZE), dtype=torch.float32) for i in range(size)]
+
             dist.gather(old_actions[0], gather_list=old_actions, dst=0, group=group)
             dist.gather(old_logprobs[0], gather_list=old_logprobs, dst=0, group=group)
             dist.gather(old_returns[0], gather_list=old_returns, dst=0, group=group)
             dist.gather(old_hiddens[0], gather_list=old_hiddens, dst=0, group=group)
+
             states = torch.cat(old_states[1:])
             actions = torch.cat(old_actions[1:])
             logprobs = torch.cat(old_logprobs[1:])
             returns = torch.cat(old_returns[1:])
             hiddens = torch.cat(old_hiddens[1:])
+
             # print(states.shape, actions.shape, logprobs.shape, returns.shape, hiddens.shape)
             trainer.train(states, actions, logprobs, returns, hiddens, scheduler.value(num_frames))
 
@@ -349,6 +359,7 @@ if __name__ == '__main__':
     os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None # make dir to save models etc.
     size = num_agents + 1
     processes = []
+    info['process_batches'] = torch.zeros(size).share_memory_()
     
     for rank in range(size):
         p = mp.Process(target=init_process, args=(shared_policy, policy, rank, size, run, info, args))

@@ -43,6 +43,7 @@ def get_args():
 
 T_HORIZON = 128
 ADAM_LR = 2.5e-4 # TODO ANNEAL this over the training to 0
+ADAM_LR = 0.0
 N_EPOCHS = 3
 DF = 0.989
 N_ACTORS = 8
@@ -348,6 +349,7 @@ if __name__ == '__main__':
     env = gym.make("WimblepongVisualSimpleAI-v0")
 
     shared_policy = NNPolicy(1, MEM_SIZE, env.action_space.n)
+    shared_policy.try_load("pingfuckingpong/")
     shared_policy.share_memory()
     policy = NNPolicy(1, MEM_SIZE, env.action_space.n)
     policy.load_state_dict(shared_policy.state_dict())

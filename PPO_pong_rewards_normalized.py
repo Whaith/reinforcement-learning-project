@@ -25,7 +25,6 @@ from prototypes.utils import LinearSchedule
 from tensorboardX import SummaryWriter
 
 
-
 def get_args():
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('--env', default='PingFuckingPong', type=str, help='gym environment')
@@ -130,6 +129,9 @@ class PPO_Agent():
             returns.insert(0, R)
         returns = torch.tensor(returns)
         return (returns - returns.mean())/(returns.std() + self.eps)
+
+    def get_name(self):
+        return "Ping Ping Ong"
 
     def get_experience(self, final_obs=None, done=True):
         state, hx = final_obs

@@ -41,24 +41,24 @@ def get_args():
     parser.add_argument('--hidden', default=256, type=int, help='hidden size of GRU')
     return parser.parse_args()
 
-T_HORIZON = 256
-ADAM_LR = 2.5e-4 # TODO ANNEAL this over the training to 0
+T_HORIZON = 64
+ADAM_LR = 2.5e-5 # TODO ANNEAL this over the training to 0
 # ADAM_LR = 0.0
-N_EPOCHS = 4
+N_EPOCHS = 3
 DF = 0.99
-N_ACTORS = 12
+N_ACTORS = 16
 CLIP_PARAM = 0.1 # TODO ANNEAL this over during training to 0
 ENTROPY_C2 = 0.01
 MEM_SIZE = 256
 IMAGE_H_W = 40
 
 # V2 hyperparams
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 
 def image_to_grey(obs, target_reso=(40, 40)):
     # print('here lol')
-    return (np.dot(cv2.resize(obs[...,:3], dsize=target_reso), \
-        [0.2989, 0.5870, 0.1140]).astype('float32')/255.0 + 0.15).round()
+    return np.dot(cv2.resize(obs[...,:3], dsize=target_reso), \
+        [0.2989, 0.5870, 0.1140]).astype('float32')/255.0
 
 # source https://github.com/greydanus/baby-a3c/blob/master/baby-a3c.py
 class NNPolicy(nn.Module): # an actor-critic neural network
@@ -67,18 +67,17 @@ class NNPolicy(nn.Module): # an actor-critic neural network
         self.conv1 = nn.Conv2d(channels, 32, 3, stride=2, padding=1)
         self.conv2 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
         self.conv3 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
-        self.conv4 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
-        self.gru = nn.GRUCell(288, 256)
+        self.conv4 = nn.Conv2d(32, 64, 3, stride=2, padding=1)
+        self.linear = nn.Linear(288+288, 256)
         self.critic_linear, self.actor_linear = nn.Linear(256, 1), nn.Linear(256, num_actions)
 
     def forward(self, inputs, train=True, hard=False):
-        inputs, hx = inputs
         x = F.elu(self.conv1(inputs))
         x = F.elu(self.conv2(x))
         x = F.elu(self.conv3(x))
         x = F.elu(self.conv4(x))
-        hx = self.gru(x.view(-1, 288), (hx))
-        return F.softmax(self.actor_linear(hx), -1), self.critic_linear(hx), hx
+        x = self.linear(x.view(-1, 288))
+        return F.softmax(self.actor_linear(x), -1), self.critic_linear(x)
 
     def try_load(self, save_dir):
         paths = glob.glob(save_dir + '*.tar') ; step = 0
@@ -95,30 +94,29 @@ class PPO_Agent():
         self.batch_update_freq = BATCH_SIZE
         
         self.policy = policy
+        self.repeat_action = None
 
         self.actions = []
         self.logprobs = []
         self.rewards = []
         self.dones = []
         self.states = []
-        self.hiddens = []
     
     def get_name(self):
         return "Ping Ping Ong"
         
     def select_action(self, state, save_values=True):
         # print(len(state))
-        state, hx_0  = state
-        state = torch.from_numpy(state).view(1, 1, IMAGE_H_W, IMAGE_H_W)
-        probs, _, hx = self.policy.forward((state, hx_0.detach()))
+        # state = state
+        # state = torch.from_numpy(state).view(1, 1, IMAGE_H_W, IMAGE_H_W)
+        probs, _ = self.policy.forward(state)
         m = Categorical(probs)
         action = m.sample()
         if save_values:
             self.actions.append(action.item())
             self.logprobs.append(m.log_prob(action).item())
             self.states.append(state)
-            self.hiddens.append(hx_0)
-        return action.item(), hx
+        return action.item()
 
     "GIVEN rewards array from rollout return the returns with zero mean and unit std"        
     def discount_rewards(self, rewards_arr, dones, gamma, final_value=0):
@@ -134,22 +132,21 @@ class PPO_Agent():
         return returns
 
     def get_experience(self, final_obs=None, done=True):
-        state, hx = final_obs
-        state = torch.from_numpy(state).view(1, 1, IMAGE_H_W, IMAGE_H_W)
-        _, state_value, _ = self.policy((state, hx))
+        # state = torch.from_numpy(state).view(1, 1, IMAGE_H_W, IMAGE_H_W)
+        _, state_value = self.policy(final_obs)
         final_value = state_value.detach() if not done else 0.0
 
         # rewards
         returns = self.discount_rewards(self.rewards, \
             self.dones, self.gamma, final_value)
         
-        states = torch.stack(self.states).float().view(-1, 1, IMAGE_H_W, IMAGE_H_W)
+        states = torch.stack(self.states).float().view(-1, 3, IMAGE_H_W, IMAGE_H_W)
         old_actions = self.actions
         old_logprobs = torch.tensor(self.logprobs).float()
-        hiddens = torch.stack(self.hiddens).float()
-        hxs = torch.stack(self.hiddens).view(-1, MEM_SIZE).float()
+        # hiddens = torch.stack(self.hiddens).float()
+        # hxs = torch.stack(self.hiddens).view(-1, MEM_SIZE).float()
         # print('collected experience')
-        return states, torch.tensor(old_actions), old_logprobs, returns, hxs
+        return states, torch.tensor(old_actions), old_logprobs, returns
 
     def clear_experience(self):
         del self.actions[:]
@@ -157,7 +154,6 @@ class PPO_Agent():
         del self.logprobs[:]
         del self.rewards[:]
         del self.dones[:]
-        del self.hiddens[:]
         dist.barrier()
 
 class PPO_Centralized_Trainer():
@@ -170,15 +166,13 @@ class PPO_Centralized_Trainer():
         self.n_epochs = N_EPOCHS
         self.eps = np.finfo(np.float32).eps.item()
 
-    def train(self, states, old_actions, old_logprobs, returns, hiddens, alpha=None):
+    def train(self, states, old_actions, old_logprobs, returns, alpha=None):
         
-        returns =  (returns - returns.mean())/(returns.std() + self.eps)
         # print('processing experience')
         for i in range(self.n_epochs):
             # Calculate needed values    
             # print('qqqqq', states.shape, hiddens.shape)
-            p, v, _ = policy.forward((states, hiddens))
-
+            p, v = policy.forward(states)
             m = Categorical(p)
             c = m.log_prob(old_actions)
             entr = m.entropy()
@@ -186,12 +180,14 @@ class PPO_Centralized_Trainer():
             # value fn loss
             loss_vf = F.mse_loss(v.squeeze(-1), returns.squeeze(-1))
 
-            # anneal the clip value
+            # anneal the clip valueh
             if alpha != None:
                 self.clip_val = CLIP_PARAM*alpha
 
             # surrogate loss
             advantage = returns - v.detach()
+            advantage =  (advantage - advantage.mean())/(advantage.std() + self.eps)
+
             r_ts = torch.exp(c - old_logprobs)
             loss_surr = - (torch.min(r_ts * advantage, \
                 torch.clamp(r_ts, 1-self.clip_val, 1+self.clip_val) * advantage)).mean()
@@ -230,13 +226,13 @@ def run(shared_policy, policy, rank, size, info, args):
         if rank == 1: writer = SummaryWriter()
         T = 0
         agent = PPO_Agent(shared_policy)
-        # if rank == 1: rewards_deque = deque([0], maxlen=1000)
         start_time = last_disp_time = time.time()
         for i_episode in range(N_eps):
-            observation = env.reset()
+            init_obs = image_to_grey(env.reset())
+            obs_deq = deque([torch.from_numpy(init_obs) for i in range(3)], maxlen=3)
             if rank == 1: total_r = 0
             done = True
-            hx = torch.zeros(1, MEM_SIZE) if done else hx.detach()
+            # hx = torch.zeros(1, MEM_SIZE) if done else hx.detach()
             epr = 0
             while True:
                 T += 1
@@ -245,19 +241,26 @@ def run(shared_policy, policy, rank, size, info, args):
                 num_frames = int(info['frames'].item())
                 # num_frames = 0
                 # print('-obssss shapee', observation.shape)
-                action, hx = agent.select_action((image_to_grey(observation), hx))
+                # print(obs_deq)
+                action = agent.select_action(torch.stack(list(obs_deq)).view(-1, 3, 40, 40))
                 observation, reward, done, _ = env.step(action)
+                obs_deq.append(torch.from_numpy(image_to_grey(observation)))
                 # check that the reward is always non zero
                 if np.abs(reward) < 5:
-                    reward = 0.01
+                    reward = 0.001
                 agent.rewards.append(reward)
                 epr += reward
                 agent.dones.append(done)
-
+                # print('aaa')
                 if rank == 1: total_r += reward
                 if T % batch_update_freq == 0:
-                    next_obs = (image_to_grey(observation), hx)
-                    a,b,c,d,h = agent.get_experience(next_obs, done)
+                    # print('list', obs_deq)
+                    # print('zzzzz')
+
+                    # print(torch.stack(list(obs_deq)).shape)
+                    next_obs = torch.stack(list(obs_deq)).view(-1, 3, 40, 40)
+                    a,b,c,d = agent.get_experience(next_obs, done)
+                    # print("GETTING EXP")
                     # print(a.size(), a.dtype)
                     # print(h.size(), h.dtype)
                     # print(f"""
@@ -275,7 +278,7 @@ def run(shared_policy, policy, rank, size, info, args):
                     # # dist.barrier()
                     dist.gather(d, gather_list=[], dst=0, group=group)
                     # print('HIDDENS shape: ', h, h.shape)
-                    dist.gather(h, gather_list=[], dst=0, group=group)
+                    # dist.gather(h, gather_list=[], dst=0, group=group)
                     
                     agent.clear_experience()
 
@@ -306,11 +309,11 @@ def run(shared_policy, policy, rank, size, info, args):
     # centralized actor training on the training data
     else:
         trainer = PPO_Centralized_Trainer(shared_policy, policy)
-        old_states = [torch.zeros((T_HORIZON, 1, IMAGE_H_W, IMAGE_H_W), dtype=torch.float32) for i in range(size)]
+        old_states = [torch.zeros((T_HORIZON, 3, IMAGE_H_W, IMAGE_H_W), dtype=torch.float32) for i in range(size)]
         old_actions = [torch.zeros((T_HORIZON), dtype=torch.int64) for i in range(size)]
         old_logprobs = [torch.zeros((T_HORIZON), dtype=torch.float32) for i in range(size)]
         old_returns = [torch.zeros((T_HORIZON), dtype=torch.float32) for i in range(size)]
-        old_hiddens = [torch.zeros((T_HORIZON, MEM_SIZE), dtype=torch.float32) for i in range(size)]
+        # old_hiddens = [torch.zeros((T_HORIZON, MEM_SIZE), dtype=torch.float32) for i in range(size)]
         scheduler = LinearSchedule(60e6, final_p = 0.3, initial_p= 1.0)
         while(True):
             num_frames = int(info['frames'].item())
@@ -318,14 +321,14 @@ def run(shared_policy, policy, rank, size, info, args):
             dist.gather(old_actions[0], gather_list=old_actions, dst=0, group=group)
             dist.gather(old_logprobs[0], gather_list=old_logprobs, dst=0, group=group)
             dist.gather(old_returns[0], gather_list=old_returns, dst=0, group=group)
-            dist.gather(old_hiddens[0], gather_list=old_hiddens, dst=0, group=group)
+            # dist.gather(old_hiddens[0], gather_list=old_hiddens, dst=0, group=group)
             states = torch.cat(old_states[1:])
             actions = torch.cat(old_actions[1:])
             logprobs = torch.cat(old_logprobs[1:])
             returns = torch.cat(old_returns[1:])
-            hiddens = torch.cat(old_hiddens[1:])
+            # hiddens = torch.cat(old_hiddens[1:])
             # print(states.shape, actions.shape, logprobs.shape, returns.shape, hiddens.shape)
-            trainer.train(states, actions, logprobs, returns, hiddens, scheduler.value(num_frames))
+            trainer.train(states, actions, logprobs, returns, scheduler.value(num_frames))
 
 def init_process(shared_policy, policy, rank, size, fn, info, args, backend='gloo'):
     """ Initialize the distributed environment. """
@@ -342,14 +345,14 @@ def evaluate_model():
 if __name__ == '__main__':
     args = get_args()
 
-    num_agents = N_ACTORS
+    num_agents = 2
     # one thread 0 is reserved for centralized learner
     env = gym.make("WimblepongVisualSimpleAI-v0")
 
-    shared_policy = NNPolicy(1, MEM_SIZE, env.action_space.n)
-    shared_policy.try_load("pingfuckingpong/")
+    shared_policy = NNPolicy(3, MEM_SIZE, env.action_space.n)
+    shared_policy.try_load(args.env)
     shared_policy.share_memory()
-    policy = NNPolicy(1, MEM_SIZE, env.action_space.n)
+    policy = NNPolicy(3, MEM_SIZE, env.action_space.n)
     policy.load_state_dict(shared_policy.state_dict())
     
     info = {k: torch.DoubleTensor([0]).share_memory_() for k in ['run_epr', 'episodes', 'frames']}

@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 
-import os
+import os, glob
 import gym
 import numpy as np
 from itertools import count
@@ -79,6 +79,14 @@ class NNPolicy(nn.Module): # an actor-critic neural network
         hx = self.gru(x.view(-1, 32 * 5 * 5), (hx))
         return F.softmax(self.actor_linear(hx), -1), self.critic_linear(hx), hx
 
+    def try_load(self, save_dir):
+        paths = glob.glob(save_dir + '*.tar') ; step = 0
+        if len(paths) > 0:
+            ckpts = [int(s.split('.')[-2]) for s in paths]
+            ix = np.argmax(ckpts) ; step = ckpts[ix]
+            self.load_state_dict(torch.load(paths[ix]))
+        print("\tno saved models") if step is 0 else print("\tloaded model: {}".format(paths[ix]))
+        return step
 
 class PPO_Agent():
 

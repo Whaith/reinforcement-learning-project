@@ -15,7 +15,7 @@ def train(env_name="ContinuousCartPole-v0"):
 
     # Create a Gym environment
     # This creates 64 parallel envs running in 8 processes (8 threads each)
-    env = ParallelEnvs(env_name, processes=8, envs_per_process=8)
+    env = ParallelEnvs(env_name, processes=5, envs_per_process=5)
 
     # Get dimensionalities of actions and observations
     action_space_dim = env.action_space.shape[-1]
@@ -79,7 +79,7 @@ def train(env_name="ContinuousCartPole-v0"):
             plt.clf()
             torch.save(agent.policy.state_dict(), "model.mdl")
             print("%d: Plot and model saved." % total_steps)
-    return data
+    return 1
 
 
 # Function to test a trained policy

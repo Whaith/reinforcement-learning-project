@@ -13,7 +13,8 @@ import torch
 import argparse
 import wimblepong
 from PIL import Image
-from PPO_pong import PPO_Agent, NNPolicy, image_to_grey
+from PPO_pong import PPO_Agent
+from PPO_pong_rewards_normalized import NNPolicy, image_to_grey
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")

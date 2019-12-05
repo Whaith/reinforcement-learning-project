@@ -40,7 +40,6 @@ policy = NNPolicy(1, 256, env.action_space.n)
 policy.try_load(args.load_dir)
 player = PPO_Agent(policy)
 
-
 # policy2 = NNPolicy(1, 256, env.action_space.n)
 # policy2.try_load(args.load_dir)
 # player2 = PPO_Agent(policy)

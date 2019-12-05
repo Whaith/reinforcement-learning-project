@@ -14,10 +14,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torch.distributed as dist
+import torch.multiprocessing as mp
 from torch.distributions import Categorical
 import cv2, glob
-import torch.multiprocessing as mp
-import torch.distributed as dist
 import wimblepong
 import argparse
 import time
@@ -41,21 +41,21 @@ def get_args():
     parser.add_argument('--hidden', default=256, type=int, help='hidden size of GRU')
     return parser.parse_args()
 
-T_HORIZON = 128
+T_HORIZON = 256
 ADAM_LR = 2.5e-4 # TODO ANNEAL this over the training to 0
 # ADAM_LR = 0.0
-N_EPOCHS = 3
-DF = 0.989
-N_ACTORS = 8
+N_EPOCHS = 4
+DF = 0.99
+N_ACTORS = 12
 CLIP_PARAM = 0.1 # TODO ANNEAL this over during training to 0
 ENTROPY_C2 = 0.01
 MEM_SIZE = 256
-IMAGE_H_W = 80
+IMAGE_H_W = 40
 
 # V2 hyperparams
 BATCH_SIZE = 128
 
-def image_to_grey(obs, target_reso=(80, 80)):
+def image_to_grey(obs, target_reso=(40, 40)):
     # print('here lol')
     return (np.dot(cv2.resize(obs[...,:3], dsize=target_reso), \
         [0.2989, 0.5870, 0.1140]).astype('float32')/255.0 + 0.15).round()
@@ -68,7 +68,7 @@ class NNPolicy(nn.Module): # an actor-critic neural network
         self.conv2 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
         self.conv3 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
         self.conv4 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
-        self.gru = nn.GRUCell(32 * 5 * 5, 256)
+        self.gru = nn.GRUCell(288, 256)
         self.critic_linear, self.actor_linear = nn.Linear(256, 1), nn.Linear(256, num_actions)
 
     def forward(self, inputs, train=True, hard=False):
@@ -77,7 +77,7 @@ class NNPolicy(nn.Module): # an actor-critic neural network
         x = F.elu(self.conv2(x))
         x = F.elu(self.conv3(x))
         x = F.elu(self.conv4(x))
-        hx = self.gru(x.view(-1, 32 * 5 * 5), (hx))
+        hx = self.gru(x.view(-1, 288), (hx))
         return F.softmax(self.actor_linear(hx), -1), self.critic_linear(hx), hx
 
     def try_load(self, save_dir):
@@ -89,13 +89,10 @@ class NNPolicy(nn.Module): # an actor-critic neural network
         print("\tno saved models") if step is 0 else print("\tloaded model: {}".format(paths[ix]))
         return step
 
-
-
 class PPO_Agent():
     def __init__(self, policy):
         self.gamma = DF
-        self.eps = np.finfo(np.float32).eps.item()
-        self.batch_update_freq = T_HORIZON
+        self.batch_update_freq = BATCH_SIZE
         
         self.policy = policy
 
@@ -134,7 +131,7 @@ class PPO_Agent():
             R = r + R*gamma
             returns.insert(0, R)
         returns = torch.tensor(returns)
-        return (returns - returns.mean())/(returns.std() + self.eps)
+        return returns
 
     def get_experience(self, final_obs=None, done=True):
         state, hx = final_obs
@@ -171,9 +168,11 @@ class PPO_Centralized_Trainer():
         self.c2 = ENTROPY_C2
         self.optimizer = optim.Adam(self.policy.parameters(), lr=ADAM_LR)
         self.n_epochs = N_EPOCHS
+        self.eps = np.finfo(np.float32).eps.item()
 
     def train(self, states, old_actions, old_logprobs, returns, hiddens, alpha=None):
         
+        returns =  (returns - returns.mean())/(returns.std() + self.eps)
         # print('processing experience')
         for i in range(self.n_epochs):
             # Calculate needed values    
@@ -187,7 +186,6 @@ class PPO_Centralized_Trainer():
             # value fn loss
             loss_vf = F.mse_loss(v.squeeze(-1), returns.squeeze(-1))
 
-
             # anneal the clip value
             if alpha != None:
                 self.clip_val = CLIP_PARAM*alpha
@@ -200,7 +198,7 @@ class PPO_Centralized_Trainer():
             
             # maximize entropy bonus
             loss_entropy = - self.c2 * entr.mean()
-
+            
             # the total_loss
             loss_total = loss_vf + loss_surr + loss_entropy
             if alpha != None:

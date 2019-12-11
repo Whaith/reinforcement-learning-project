@@ -9,7 +9,6 @@ import gym
 import numpy as np
 import argparse
 import wimblepong
-import PPO_Agent from prototypes.PPO_agent
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")

@@ -5,6 +5,7 @@ from collections import namedtuple
 import matplotlib.pyplot as plt
 import random
 import seaborn as sns
+import copy
 
 import torch
 import torch.nn as nn
@@ -19,6 +20,12 @@ print(device)
 
 def moving_average(x, N):
     return np.convolve(x, np.ones(N, ), mode='valid') / N
+
+
+def hidden_init(layer):
+    fan_in = layer.weight.data.size()[0]
+    lim = 1. / np.sqrt(fan_in)
+    return (-lim, lim)
 
 # taken from openAI baselines
 class LinearSchedule(object):
@@ -38,7 +45,13 @@ class Policy_net(nn.Module):
         self.affine1 = nn.Linear(3, 200)
         self.affine2 = nn.Linear(200, 100)
         self.mean_head = nn.Linear(100, 1)
-        # self.sigma = torch.nn.Parameter(torch.tensor([self.sigma], requires_grad=True))
+        self.reset_parameters()
+        # self.sigma = torch.nn.Parameter(torch.tensor([ self.sigma], requires_grad=True))
+
+    def reset_parameters(self):
+        self.affine1.weight.data.uniform_(*hidden_init(self.affine1))
+        self.affine2.weight.data.uniform_(*hidden_init(self.affine2))
+        self.mean_head.weight.data.uniform_(-3e-3, 3e-3)
 
     def forward(self, x):
         x = x.to(device)
@@ -56,6 +69,13 @@ class Q_net(nn.Module):
         self.affine2 = nn.Linear(200, 100)
         self.value_head = nn.Linear(100, 10)
         self.value_head2 = nn.Linear(action_space + 10, 1)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.affine1.weight.data.uniform_(*hidden_init(self.affine1))
+        self.affine2.weight.data.uniform_(*hidden_init(self.affine2))
+        self.value_head.weight.data.uniform_(*hidden_init(self.value_head))
+        self.value_head2.weight.data.uniform_(-3e-3, 3e-3)
 
     def forward(self, state):
         x, action  = state
@@ -187,11 +207,10 @@ def train_on_batch(memory, batch_size, df, T):
 #         dx = self.theta * (self.mu - x) + self.sigma * np.array([random.random() for i in range(len(x))])
 #         self.state = x + dx
 #         return self.state
-
     
 def learn_episodic_DDPG(N_eps=500): 
     
-    memory_len = int(1e5)
+    memory_len = int(5e5)
     df = 0.99
     batch_size = 128
     train_freq = 1
@@ -199,16 +218,16 @@ def learn_episodic_DDPG(N_eps=500):
     # target_update_freq = 1000
     
     # scheduler
+    warmup_steps = 10000
     e_s = 1.0
-    e_e = 0.01
-    N_decay = 100000
+    e_e = 0.3
+    N_decay = 30000
     scheduler = LinearSchedule(N_decay, e_e, e_s)
     
     # replay mem
     memory = ReplayMemory(memory_len)
     rewards = []
 #     writer = SummaryWriter()
-
     env = gym.make('Pendulum-v0')
     # n_actions = env.action_space.n
     noise = 0
@@ -225,11 +244,15 @@ def learn_episodic_DDPG(N_eps=500):
         for t in range(300):
             T += 1
 
-            curr_epsilon = scheduler.value(T)
-            noise = np.random.normal(0, curr_epsilon)
-            action_mean = policy_net(torch.from_numpy(observation).float())
-            action = np.clip(action_mean.item() + noise , -1, 1)
-
+            if T < warmup_steps:
+                action = env.action_space.sample()[0]
+            else:
+                curr_epsilon = scheduler.value(T - warmup_steps)
+                noise = np.random.normal(0, curr_epsilon)
+                if i_episode % 50 == 0 and t == 0 :
+                    print(f"noise of episode: {i_episode}, {noise}, epsilon: {curr_epsilon}")
+                action_mean = policy_net(torch.from_numpy(observation).float())
+                action = np.clip(action_mean.item() + noise , -2.0, 2.0)
                 # print(action)
             next_observation, reward, done, info = env.step([action])
             total_r += reward
@@ -246,12 +269,12 @@ def learn_episodic_DDPG(N_eps=500):
 
             if done:
                 break
-        print("done episode ", i_episode)
+        # print("done episode ", i_episode)
         # print(np.mean(running_epr))
         # writer.add_scalar("Episode_reward", total_r, i_episode)
         running_epr.append(total_r)
         if (i_episode + 1) % 100 == 0:
-            print('curr eps', noise, "epsilon", curr_epsilon)
+            # print('curr eps', noise)
             print("Episode {} finished with {} total rewards, T: {}".format(i_episode, np.mean(running_epr), T))
                 
         rewards.append(total_r)

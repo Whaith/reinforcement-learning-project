@@ -5,8 +5,10 @@ import torch.optim as optim
 from torch.distributions import Categorical
 from torch.distributions import Normal
 
+import numpy as np
+
 from NNets import Q_net, Policy_net
-from utils import soft_update, hard_update, ReplayMemory, LinearSchedule
+from utils import soft_update, hard_update, ReplayMemory, LinearSchedule, Transition
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -15,6 +17,8 @@ GAMMA = 0.99
 LR = 1e-3
 TAU = 1e-3
 WARMUP_STEPS = 10000
+E_GREEDY_STEPS = 20000
+FINAL_STD = 0.1
 BATCH_SIZE = 64
 
 class DDPG_Agent:
@@ -25,18 +29,30 @@ class DDPG_Agent:
         self.qnet = Q_net(ob_sp, act_sp)
         self.qnet_targ = Q_net(ob_sp, act_sp)
 
+        self.policy.to(device)
+
         hard_update(self.policy_targ, self.policy)
         hard_update(self.qnet_targ, self.qnet)
 
         self.p_optimizer = optim.Adam(self.policy.parameters(), lr = LR)
         self.q_optimizer = optim.Adam(self.qnet.parameters(), lr = LR)
         self.memory = ReplayMemory(int(1e6))
+        self.epsilon_scheduler = LinearSchedule(E_GREEDY_STEPS, FINAL_STD, 1.0, warmup_steps=WARMUP_STEPS)
+        self.n_steps = 0
 
-    def act(self, state):
-        
-        pass
+    def get_action(self, state):
+        noise = np.random.normal(0, self.epsilon_scheduler.value(self.n_steps))
+        st = torch.from_numpy(state).view(1, -1).float()
+        action = self.policy(st)
+        self.n_steps += 1
+        return action.item() + noise
+
+    def store_transition(self, state, action, reward, next_state, done):
+        self.memory.push(state, action, reward, next_state, done)
 
     def train(self):
+        samples = self.memory.sample(min(BATCH_SIZE, len(self.memory)))
+        print(len(samples))
         pass
 
 # Q_value_net = Q_net()

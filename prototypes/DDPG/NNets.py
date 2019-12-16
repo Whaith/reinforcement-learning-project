@@ -1,78 +1,37 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
+
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-
-def hidden_init(layer):
-    fan_in = layer.weight.data.size()[0]
-    lim = 1. / np.sqrt(fan_in)
-    return (-lim, lim)
-
-
 class Policy_net(nn.Module):
-    """Actor (Policy) Model."""
-
-    def __init__(self, state_size, action_size, seed=np.random.randint(0, 1000), fc1_units=400, fc2_units=300):
-        """Initialize parameters and build model.
-        Params
-        ======
-            state_size (int): Dimension of each state
-            action_size (int): Dimension of each action
-            seed (int): Random seed
-            fc1_units (int): Number of nodes in first hidden layer
-            fc2_units (int): Number of nodes in second hidden layer
-        """
+    def __init__(self, ob_sp, act_sp):
         super(Policy_net, self).__init__()
-        self.seed = torch.manual_seed(seed)
-        self.fc1 = nn.Linear(state_size, fc1_units)
-        self.fc2 = nn.Linear(fc1_units, fc2_units)
-        self.fc3 = nn.Linear(fc2_units, action_size)
-        self.reset_parameters()
-        self.to(device)
+        self.affine1 = nn.Linear(ob_sp, 400)
+        self.affine2 = nn.Linear(400, 300)
+        self.mean_head = nn.Linear(300, act_sp)
 
-    def reset_parameters(self):
-        self.fc1.weight.data.uniform_(*hidden_init(self.fc1))
-        self.fc2.weight.data.uniform_(*hidden_init(self.fc2))
-        self.fc3.weight.data.uniform_(-3e-3, 3e-3)
-
-    def forward(self, state):
-        """Build an actor (policy) network that maps states -> actions."""
-        x = F.relu(self.fc1(state.to(device).float()))
-        x = F.relu(self.fc2(x))
-        return torch.tanh(self.fc3(x))
+    def forward(self, x):
+        x = x.to(device).float()
+        x = F.relu(self.affine1(x))
+        x = F.relu(self.affine2(x))
+        mean = 2 * torch.tanh(self.mean_head(x))
+        return mean
 
 
 class Q_net(nn.Module):
-    """Critic (Value) Model."""
-
-    def __init__(self, state_size, action_size, seed=np.random.randint(0, 1000), fcs1_units=400, fc2_units=300):
-        """Initialize parameters and build model.
-        Params
-        ======
-            state_size (int): Dimension of each state
-            action_size (int): Dimension of each action
-            seed (int): Random seed
-            fcs1_units (int): Number of nodes in the first hidden layer
-            fc2_units (int): Number of nodes in the second hidden layer
-        """
+    def __init__(self, ob_sp, act_sp):
         super(Q_net, self).__init__()
-        self.seed = torch.manual_seed(seed)
-        self.fcs1 = nn.Linear(state_size, fcs1_units)
-        self.fc2 = nn.Linear(fcs1_units + action_size, fc2_units)
-        self.fc3 = nn.Linear(fc2_units, 1)
-        self.reset_parameters()
-        self.to(device)
+        self.act_sp = act_sp
+        self.ob_sp = ob_sp
+        self.affine1 = nn.Linear(self.ob_sp, 400)
+        self.affine2 = nn.Linear(400 + self.act_sp, 300)
+        self.value_head = nn.Linear(300, 1)
 
-    def reset_parameters(self):
-        self.fcs1.weight.data.uniform_(*hidden_init(self.fcs1))
-        self.fc2.weight.data.uniform_(*hidden_init(self.fc2))
-        self.fc3.weight.data.uniform_(-3e-3, 3e-3)
-
-    def forward(self, state, action):
-        """Build a critic (value) network that maps (state, action) pairs -> Q-values."""
-        xs = F.relu(self.fcs1(state.to(device).float()))
-        x = torch.cat((xs, action.to(device).float()), dim=1)
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
+    def forward(self, x_, action_):
+        x, action = x_.to(device).float(), action_.to(device).float()
+        x = F.relu(self.affine1(x))
+        x = torch.cat([x, action], 1)
+        x = F.relu(self.affine2(x))
+        return self.value_head(x)
+    

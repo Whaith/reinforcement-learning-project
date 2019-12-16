@@ -6,7 +6,7 @@ import argparse
 from collections import deque
 from cp_cont import CartPoleEnv
 from DDPG_agent import DDPG_Agent
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 
 def get_args():
@@ -42,7 +42,7 @@ def learn_episodic_DDPG(args):
             
             if args.render:
                 env.render()
-                
+
             if done:
                 break
         writer.add_scalar('Epr', epr, ep)

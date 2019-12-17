@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+
 class Policy_net(nn.Module):
     def __init__(self, ob_sp, act_sp):
         super(Policy_net, self).__init__()

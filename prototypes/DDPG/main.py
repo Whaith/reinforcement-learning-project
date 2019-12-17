@@ -11,23 +11,33 @@ from torch.utils.tensorboard import SummaryWriter
 
 def get_args():
     parser = argparse.ArgumentParser(description=None)
-    parser.add_argument('--env', default="ContinuousCartPole-v0", type=str, help='gym environment name')
+    parser.add_argument('--env', default="Pendulum-v0", type=str, help='gym environment name')
     parser.add_argument('--n_eps', default=400, type=int, help='N_episodes')
     parser.add_argument('--T', default=300, type=int, help='maximum timesteps per episode')
     parser.add_argument("--render", action="store_true", help="Render the environment mode")
+    parser.add_argument("--use_writer", action="store_true", help="Render the environment mode")
     parser.add_argument("--lograte", default=100, type=int, help="Log frequency")
+    parser.add_argument("--discrete_action", default=False, type=bool, help="Use discrete action outputs")
     # parser.add_argument("--render", default=, help="Render the environment mode")
     return parser.parse_args()
 
 
 def learn_episodic_DDPG(args):
-    env = gym.make('Pendulum-v0')
-    ob_sp = env.observation_space.shape[0]
-    act_sp = env.action_space.shape[0]
+    ###
+    args.env = "CartPole-v0"
+    args.discrete_action = True
 
-    writer = SummaryWriter()
+    env = gym.make(args.env)
+    ob_sp = env.observation_space.shape[0]
+    if args.discrete_action:
+        act_sp = env.action_space.n
+    else:
+        act_sp = env.action_space.shape[0]
+    if not args.use_writer:
+        print("not using writer")    
+    writer = SummaryWriter() if args.use_writer else None
     running_rewards = deque([], maxlen=args.lograte)
-    agent = DDPG_Agent(ob_sp, act_sp, -2, 2, writer)
+    agent = DDPG_Agent(ob_sp, act_sp, -2, 2, writer, args)
     for ep in range(args.n_eps):
         observation = env.reset()
         done = False
@@ -45,7 +55,8 @@ def learn_episodic_DDPG(args):
 
             if done:
                 break
-        writer.add_scalar('Epr', epr, ep)
+        if args.use_writer:
+            writer.add_scalar('Epr', epr, ep)
         running_rewards.append(epr)
         if (ep + 1) % args.lograte == 0:
             print(f"episode: {ep}, running episode rewards: {np.mean(running_rewards)}")

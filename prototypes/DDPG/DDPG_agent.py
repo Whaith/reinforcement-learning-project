@@ -4,7 +4,7 @@ import torch.optim as optim
 import numpy as np
 from NNets import Q_net, Policy_net
 from utils import soft_update, hard_update, ReplayMemory, LinearSchedule, \
-    Transition
+    Transition, OUNoise
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -36,6 +36,7 @@ class DDPG_Agent:
         self.policy_targ.to(device)
         self.qnet_targ.to(device)
         self.MSE_loss = nn.MSELoss()
+        self.noise = OUNoise(1, 1)
 
         hard_update(self.policy_targ, self.policy)
         hard_update(self.qnet_targ, self.qnet)
@@ -50,10 +51,13 @@ class DDPG_Agent:
         self.writer = writer
 
     def get_action(self, state):
-        noise = np.random.normal(0, self.epsilon_scheduler.value(self.n_steps))
+        if self.args.use_ounoise:
+            noise = self.noise.sample()
+        else:
+            noise = np.random.normal(0, self.epsilon_scheduler.value(self.n_steps))
         st = torch.from_numpy(state).view(1, -1).float()
         action = self.policy(st)
-        action_with_noise = np.clip(action.item() + noise, self.alow, self.ahigh)
+        action_with_noise = np.clip(action.item() + noise[0], self.alow, self.ahigh)
         if self.args.use_writer:
             self.writer.add_scalar("action mean", action.item(), self.n_steps)
             self.writer.add_scalar("action noise", noise, self.n_steps)
@@ -67,6 +71,9 @@ class DDPG_Agent:
         self.memory.push(torch.from_numpy(state), torch.tensor(action),
                          torch.tensor(reward), torch.from_numpy(next_state),
                          torch.tensor(done))
+
+    def reset(self):
+        self.noise.reset()
 
     def train(self):
         batch = self.memory.sample(min(BATCH_SIZE, len(self.memory)))

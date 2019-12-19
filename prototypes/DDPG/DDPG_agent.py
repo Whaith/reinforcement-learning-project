@@ -52,12 +52,12 @@ class DDPG_Agent:
 
     def get_action(self, state):
         if self.args.use_ounoise:
-            noise = self.noise.sample()
+            noise = self.noise.sample()[0]
         else:
             noise = np.random.normal(0, self.epsilon_scheduler.value(self.n_steps))
         st = torch.from_numpy(state).view(1, -1).float()
         action = self.policy(st)
-        action_with_noise = np.clip(action.item() + noise[0], self.alow, self.ahigh)
+        action_with_noise = np.clip(action.item() + noise, self.alow, self.ahigh)
         if self.args.use_writer:
             self.writer.add_scalar("action mean", action.item(), self.n_steps)
             self.writer.add_scalar("action noise", noise, self.n_steps)

@@ -1,11 +1,7 @@
-import sys
-sys.path.append('.')
-
 import os
 import gym
 import numpy as np
-from itertools import count
-from collections import namedtuple, deque
+from collections import deque
 import matplotlib.pyplot as plt
 import random
 import seaborn as sns
@@ -17,13 +13,16 @@ import torch.optim as optim
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.distributions import Categorical
-import cv2, glob
+import cv2
+import glob
 import wimblepong
 import argparse
 import time
 from prototypes.utils import LinearSchedule
 from tensorboardX import SummaryWriter
 
+import sys
+sys.path.append('.')
 
 
 def get_args():
@@ -40,9 +39,10 @@ def get_args():
     parser.add_argument('--horizon', default=0.99, type=float, help='horizon for running averages')
     parser.add_argument('--hidden', default=256, type=int, help='hidden size of GRU')
     return parser.parse_args()
-
 T_HORIZON = 64
-ADAM_LR = 2.5e-5 # TODO ANNEAL this over the training to 0
+
+
+ADAM_LR = 2.5e-5  # TODO ANNEAL this over the training to 0
 # ADAM_LR = 0.0
 N_EPOCHS = 3
 DF = 0.99
@@ -137,8 +137,8 @@ class PPO_Agent():
         final_value = state_value.detach() if not done else 0.0
 
         # rewards
-        returns = self.discount_rewards(self.rewards, \
-            self.dones, self.gamma, final_value)
+        returns = self.discount_rewards(self.rewards, self.dones, self.gamma,
+                                        final_value)
         
         states = torch.stack(self.states).float().view(-1, 3, IMAGE_H_W, IMAGE_H_W)
         old_actions = self.actions
@@ -181,16 +181,18 @@ class PPO_Centralized_Trainer():
             loss_vf = F.mse_loss(v.squeeze(-1), returns.squeeze(-1))
 
             # anneal the clip valueh
-            if alpha != None:
+            if alpha is not None:
                 self.clip_val = CLIP_PARAM*alpha
 
             # surrogate loss
             advantage = returns - v.detach()
-            advantage =  (advantage - advantage.mean())/(advantage.std() + self.eps)
+            advantage = (advantage - advantage.mean()) / \
+                        (advantage.std() + self.eps)
 
             r_ts = torch.exp(c - old_logprobs)
-            loss_surr = - (torch.min(r_ts * advantage, \
-                torch.clamp(r_ts, 1-self.clip_val, 1+self.clip_val) * advantage)).mean()
+            loss_surr = - (torch.min(r_ts * advantage,
+                           torch.clamp(r_ts, 1-self.clip_val, 1+self.clip_val)
+                           * advantage)).mean()
             
             # maximize entropy bonus
             loss_entropy = - self.c2 * entr.mean()
